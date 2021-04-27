@@ -19,6 +19,11 @@ extern "C" {
 }
 
 struct Statistics {
+    Statistics() {}
+    Statistics(double m, double v, double sd, double se, uint32_t min, uint32_t max)
+    : Mean(m), Variance(v), StandardDeviation(sd), StandardError(se), Min(min), Max(max)
+    {}
+
     double Mean {0};
     double Variance {0};
     double StandardDeviation {0};

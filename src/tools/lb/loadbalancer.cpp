@@ -93,7 +93,7 @@ struct LbInterface {
 // server address.
 //
 struct LbPrivateInterface : public LbInterface {
-    const QUIC_ADDR PeerAddress {0};
+    const QUIC_ADDR PeerAddress;// {0};
 
     LbPrivateInterface(_In_ const QUIC_ADDR* PrivateAddress, _In_ const QUIC_ADDR* PeerAddress)
         : LbInterface(PrivateAddress, false), PeerAddress(*PeerAddress) {
@@ -155,7 +155,7 @@ struct LbPublicInterface : public LbInterface {
 
     LbInterface* GetPrivateInterface(_In_ const QUIC_ADDR* Local, _In_ const QUIC_ADDR* Remote) {
         std::lock_guard<std::mutex> Scope(Lock);
-        auto& Entry = PrivateInterfaces[std::pair{*Local, *Remote}];
+        auto& Entry = PrivateInterfaces[std::pair<QUIC_ADDR, QUIC_ADDR>{*Local, *Remote}];
         if (!Entry) {
             Entry = new LbPrivateInterface(&PrivateAddrs[NextInterface++ % PrivateAddrs.size()], Remote);
         }

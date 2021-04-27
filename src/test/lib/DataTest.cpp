@@ -2065,6 +2065,9 @@ QuicTestAckSendDelay(
 }
 
 struct AbortRecvTestContext {
+    AbortRecvTestContext(QUIC_ABORT_RECEIVE_TYPE type)
+    : Type(type)
+    {}
     QUIC_ABORT_RECEIVE_TYPE Type;
     CxPlatEvent ServerStreamRecv;
     CxPlatEvent ServerStreamShutdown;

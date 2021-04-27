@@ -228,7 +228,7 @@ struct ResetStreamFrameParams {
     uint8_t Buffer[4];
     uint16_t BufferLength = 4;
 
-    static auto GenerateDecodeFailParams() {
+    static std::vector<ResetStreamFrameParams> GenerateDecodeFailParams() {
         std::vector<ResetStreamFrameParams> Params;
         for (uint32_t i = 1; i < 8; ++i) {
             ResetStreamFrameParams Temp;
@@ -296,7 +296,7 @@ struct StopSendingFrameParams {
     uint8_t Buffer[3];
     uint16_t BufferLength = 3;
 
-    static auto GenerateDecodeFailParams() {
+    static std::vector<StopSendingFrameParams> GenerateDecodeFailParams() {
         std::vector<StopSendingFrameParams> Params;
         for (uint32_t i = 1; i < 4; ++i) {
             StopSendingFrameParams Temp;
@@ -362,7 +362,7 @@ struct CryptoFrameParams {
     uint8_t Buffer[7];
     uint16_t BufferLength = 6;
 
-    static auto GenerateDecodeFailParams() {
+    static std::vector<CryptoFrameParams> GenerateDecodeFailParams() {
         std::vector<CryptoFrameParams> Params;
         for (uint32_t i = 1; i < 4; ++i) {
             CryptoFrameParams Temp;
@@ -427,7 +427,7 @@ struct NewTokenFrameParams {
     uint8_t Buffer[3];
     uint16_t BufferLength = 3;
 
-    static auto GenerateDecodeFailParams() {
+    static std::vector<NewTokenFrameParams> GenerateDecodeFailParams() {
         std::vector<NewTokenFrameParams> Params;
         for (uint32_t i = 0; i < 2; ++i) {
             NewTokenFrameParams Temp;
@@ -635,7 +635,7 @@ struct MaxDataFrameParams {
     uint8_t Buffer[2];
     uint16_t BufferLength = 2;
 
-    static auto GenerateDecodeFailParams() {
+    static std::vector<MaxDataFrameParams> GenerateDecodeFailParams() {
         std::vector<MaxDataFrameParams> Params;
         for (uint32_t i = 0; i < 2; ++i) {
             MaxDataFrameParams Temp;
@@ -678,7 +678,7 @@ struct MaxStreamDataFrameParams {
     uint8_t Buffer[3];
     uint16_t BufferLength = 3;
 
-    static auto GenerateDecodeFailParams() {
+    static std::vector<MaxStreamDataFrameParams> GenerateDecodeFailParams() {
         std::vector<MaxStreamDataFrameParams> Params;
         for (uint32_t i = 1; i < 4; ++i) {
             MaxStreamDataFrameParams Temp;
@@ -779,7 +779,7 @@ struct DataBlockedFrameParams {
     uint8_t Buffer[2];
     uint16_t BufferLength = 2;
 
-    static auto GenerateDecodeFailParams() {
+    static std::vector<DataBlockedFrameParams> GenerateDecodeFailParams() {
         std::vector<DataBlockedFrameParams> Params;
         for (uint32_t i = 0; i < 2; ++i) {
             DataBlockedFrameParams Temp;
@@ -822,7 +822,7 @@ struct StreamDataBlockedFrameParams {
     uint8_t Buffer[3];
     uint16_t BufferLength = 3;
 
-    static auto GenerateDecodeFailParams() {
+    static std::vector<StreamDataBlockedFrameParams> GenerateDecodeFailParams() {
         std::vector<StreamDataBlockedFrameParams> Params;
         for (uint32_t i = 1; i < 4; ++i) {
             StreamDataBlockedFrameParams Temp;
@@ -930,7 +930,7 @@ struct NewConnectionIdFrameParams {
     uint16_t BufferLength = 41;
     uint8_t Buffer[41];
 
-    static auto GenerateDecodeFailParams() {
+    static std::vector<NewConnectionIdFrameParams> GenerateDecodeFailParams() {
         std::vector<NewConnectionIdFrameParams> Params;
         for (uint32_t i = 1; i < 16; ++i) {
             NewConnectionIdFrameParams Frame;
@@ -1076,7 +1076,7 @@ struct RetireConnectionIdFrameParams {
     uint8_t Buffer[2];
     uint16_t BufferLength = 2;
 
-    static auto GenerateDecodeFailParams() {
+    static std::vector<RetireConnectionIdFrameParams> GenerateDecodeFailParams() {
         std::vector<RetireConnectionIdFrameParams> Params;
         for (uint32_t i = 0; i < 2; ++i) {
             RetireConnectionIdFrameParams Temp;
@@ -1177,7 +1177,7 @@ struct ConnectionCloseFrameParams {
     uint8_t Buffer[5];
     uint16_t BufferLength;
 
-    static auto GenerateDecodeFailParams() {
+    static std::vector<ConnectionCloseFrameParams> GenerateDecodeFailParams() {
         std::vector<ConnectionCloseFrameParams> Params;
         for (auto Type : {QUIC_FRAME_CONNECTION_CLOSE, QUIC_FRAME_CONNECTION_CLOSE_1}) {
             ConnectionCloseFrameParams Frame;

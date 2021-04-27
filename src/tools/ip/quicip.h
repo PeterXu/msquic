@@ -30,6 +30,10 @@ TODO:
 #define QUIC_IP_DEFAULT_STATUS QUIC_STATUS_ABORTED
 
 typedef struct QUIC_IP_LOOKUP {
+    QUIC_IP_LOOKUP(BOOLEAN s, QUIC_STATUS st, const QUIC_API_TABLE *mq, HQUIC conf, HQUIC conn, QUIC_ADDR *laddr, QUIC_ADDR *paddr)
+    : Success(s), Status(st), MsQuic(mq), Configuration(conf), Connection(conn), LocalAdrress(laddr), PublicAddress(paddr)
+    {}
+
     BOOLEAN Success;
     QUIC_STATUS Status;
     const QUIC_API_TABLE* MsQuic;
@@ -116,7 +120,7 @@ ClientConnectionCallback(
     case QUIC_CONNECTION_EVENT_SHUTDOWN_COMPLETE:
         {
             Context->MsQuic->ConnectionClose(Context->Connection);
-            std::lock_guard Lock{Context->DoneMutex};
+            std::lock_guard<std::mutex> Lock{Context->DoneMutex};
             Context->IsDone = true;
             Context->DoneEvent.notify_all();
         }
@@ -195,7 +199,7 @@ MsQuicGetPublicIPEx(
     }
 
     {
-        std::unique_lock Lock{Context.DoneMutex};
+        std::unique_lock<std::mutex> Lock{Context.DoneMutex};
         Context.DoneEvent.wait(Lock, [&]{return Context.IsDone;});
     }
 
