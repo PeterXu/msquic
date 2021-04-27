@@ -11,11 +11,13 @@ Abstract:
 
 #pragma once
 
+#include <math.h>
+
 //
 // Forward declaration because of include issues with math.h
 //
 extern "C" {
-    double sqrt(double value);
+    //double sqrt(double value);
 }
 
 struct Statistics {
@@ -96,6 +98,7 @@ GetStatistics(
             Mean);
     double StandardDeviation = sqrt(Variance);
     double StandardError = StandardDeviation / sqrt((double)DataLength);
+#if (__cplusplus >= 201703L)
     *AllStatistics = Statistics {
         Mean,
         Variance,
@@ -104,6 +107,16 @@ GetStatistics(
         Min,
         Max
     };
+#else
+    Statistics stat;
+    stat.Mean = Mean;
+    stat.Variance = Variance;
+    stat.StandardDeviation = StandardDeviation;
+    stat.StandardError = StandardError;
+    stat.Min = Min;
+    stat.Max = Max;
+    *AllStatistics = stat;
+#endif
 
 #ifdef _WIN32
     qsort_s(

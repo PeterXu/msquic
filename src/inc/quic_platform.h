@@ -17,6 +17,12 @@ Supported Environments:
 
 #pragma once
 
+#if (__cplusplus >= 201703L)
+#define DECLARE_VAR_BZERO(TYPE, var) TYPE var = {0}
+#else
+#define DECLARE_VAR_BZERO(TYPE, var) TYPE var; memset(&(var), 0, sizeof(TYPE))
+#endif
+
 #define IS_POWER_OF_TWO(x) (((x) != 0) && (((x) & ((x) - 1)) == 0))
 
 //

@@ -486,7 +486,7 @@ CxPlatConvertFromMappedV6(
     CXPLAT_DBG_ASSERT(InAddr->Ip.sa_family == QUIC_ADDRESS_FAMILY_INET6);
 
     if (IN6_IS_ADDR_V4MAPPED(&InAddr->Ipv6.sin6_addr)) {
-        QUIC_ADDR TmpAddrS = {0};
+        DECLARE_VAR_BZERO(QUIC_ADDR, TmpAddrS);
         QUIC_ADDR* TmpAddr = &TmpAddrS;
 
         TmpAddr->Ipv4.sin_family = QUIC_ADDRESS_FAMILY_INET;

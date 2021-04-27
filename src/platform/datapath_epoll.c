@@ -870,6 +870,7 @@ CxPlatSocketConfigureRss(
     )
 {
     QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
+#if SO_ATTACH_REUSEPORT_CBPF
     int Result = 0;
 
     struct sock_filter BpfCode[] = {
@@ -899,6 +900,15 @@ CxPlatSocketConfigureRss(
             Status,
             "setsockopt(SO_ATTACH_REUSEPORT_CBPF) failed");
     }
+#else
+    QuicTraceEvent(
+        DatapathErrorStatus,
+        "[data][%p] UNSUPPORT, %u, %u, %s.",
+        SocketContext->Binding,
+        SocketCount,
+        Status,
+        "setsockopt(SO_ATTACH_REUSEPORT_CBPF) failed");
+#endif
 
     return Status;
 }
@@ -918,7 +928,7 @@ CxPlatSocketContextInitialize(
     QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
     int Result = 0;
     int Option = 0;
-    QUIC_ADDR MappedAddress = {0};
+    DECLARE_VAR_BZERO(QUIC_ADDR, MappedAddress);
     socklen_t AssignedLocalAddressLength = 0;
 
     CXPLAT_SOCKET* Binding = SocketContext->Binding;
@@ -2352,7 +2362,7 @@ CxPlatSocketSendInternal(
 {
     QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
     CXPLAT_SOCKET_CONTEXT* SocketContext = NULL;
-    QUIC_ADDR MappedRemoteAddress = {0};
+    DECLARE_VAR_BZERO(QUIC_ADDR, MappedRemoteAddress);
     struct cmsghdr *CMsg = NULL;
     struct in_pktinfo *PktInfo = NULL;
     struct in6_pktinfo *PktInfo6 = NULL;

@@ -528,7 +528,7 @@ QuicSendWriteFrames(
                 continue;
             }
 
-            QUIC_PATH_RESPONSE_EX Frame = { 0 };
+            DECLARE_VAR_BZERO(QUIC_PATH_RESPONSE_EX, Frame);
             CxPlatCopyMemory(Frame.Data, TempPath->Response, sizeof(Frame.Data));
 
             if (QuicPathChallengeFrameEncode(

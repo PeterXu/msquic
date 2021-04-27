@@ -111,7 +111,7 @@ else()
 endif()
 
 option(QUIC_BUILD_TOOLS "Builds the tools code" ON)
-option(QUIC_BUILD_TEST "Builds the test code" ON)
+option(QUIC_BUILD_TEST "Builds the test code" OFF)
 option(QUIC_BUILD_PERF "Builds the perf code" ON)
 option(QUIC_ENABLE_LOGGING "Enables logging" OFF)
 option(QUIC_ENABLE_SANITIZERS "Enables sanitizers" OFF)
