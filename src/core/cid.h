@@ -299,7 +299,7 @@ QuicCidBufToStr(
     _In_ uint8_t Length
     )
 {
-    QUIC_CID_STR CidStr = { 0 };
+    DECLARE_VAR_BZERO(QUIC_CID_STR, CidStr);
     for (uint8_t i = 0; i < Length; i++) {
         CidStr.Buffer[i * 2] = QuicHalfByteToStr(Data[i] >> 4);
         CidStr.Buffer[i * 2 + 1] = QuicHalfByteToStr(Data[i] & 0xF);

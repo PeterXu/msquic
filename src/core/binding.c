@@ -950,7 +950,7 @@ QuicBindingProcessStatelessOperation(
         CXPLAT_DBG_ASSERT(sizeof(NewDestCid) >= MsQuicLib.CidTotalLength);
         CxPlatRandom(sizeof(NewDestCid), NewDestCid);
 
-        QUIC_RETRY_TOKEN_CONTENTS Token = { 0 };
+        DECLARE_VAR_BZERO(QUIC_RETRY_TOKEN_CONTENTS, Token);
         Token.Authenticated.Timestamp = CxPlatTimeEpochMs64();
 
         Token.Encrypted.RemoteAddress = RecvDatagram->Tuple->RemoteAddress;

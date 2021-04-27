@@ -376,7 +376,12 @@ QuicAddrIsWildCard(
         const IN_ADDR ZeroAddr = {0};
         return memcmp(&Addr->Ipv4.sin_addr.s_addr, &ZeroAddr, sizeof(IN_ADDR)) == 0;
     } else {
+#if (__cplusplus >= 201703L)
         const IN6_ADDR ZeroAddr = {0};
+#else
+        IN6_ADDR ZeroAddr;
+        memset(&ZeroAddr, 0, sizeof(IN6_ADDR));
+#endif
         return memcmp(&Addr->Ipv6.sin6_addr, &ZeroAddr, sizeof(IN6_ADDR)) == 0;
     }
 }

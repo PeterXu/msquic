@@ -165,7 +165,7 @@ MsQuicListenerStart(
     uint8_t* AlpnList;
     uint32_t AlpnListLength;
     BOOLEAN PortUnspecified;
-    QUIC_ADDR BindingLocalAddress = {0};
+    DECLARE_VAR_BZERO(QUIC_ADDR, BindingLocalAddress);
 
     QuicTraceEvent(
         ApiEnter,
