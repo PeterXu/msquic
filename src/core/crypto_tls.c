@@ -889,7 +889,7 @@ QuicCryptoTlsEncodeTransportParameters(
         QuicTraceLogConnVerbose(
             EncodeTPIdleTimeout,
             Connection,
-            "TP: Idle Timeout (%llu ms)",
+            "TP: Idle Timeout (%" PRIu64 " ms)",
             TransportParams->IdleTimeout);
     }
     if (TransportParams->Flags & QUIC_TP_FLAG_STATELESS_RESET_TOKEN) {
@@ -916,7 +916,7 @@ QuicCryptoTlsEncodeTransportParameters(
         QuicTraceLogConnVerbose(
             EncodeTPMaxUdpPayloadSize,
             Connection,
-            "TP: Max Udp Payload Size (%llu bytes)",
+            "TP: Max Udp Payload Size (%" PRIu64 " bytes)",
             TransportParams->MaxUdpPayloadSize);
     }
     if (TransportParams->Flags & QUIC_TP_FLAG_INITIAL_MAX_DATA) {
@@ -927,7 +927,7 @@ QuicCryptoTlsEncodeTransportParameters(
         QuicTraceLogConnVerbose(
             EncodeTPInitMaxData,
             Connection,
-            "TP: Max Data (%llu bytes)",
+            "TP: Max Data (%" PRIu64 " bytes)",
             TransportParams->InitialMaxData);
     }
     if (TransportParams->Flags & QUIC_TP_FLAG_INITIAL_MAX_STRM_DATA_BIDI_LOCAL) {
@@ -938,7 +938,7 @@ QuicCryptoTlsEncodeTransportParameters(
         QuicTraceLogConnVerbose(
             EncodeTPInitMaxStreamDataBidiLocal,
             Connection,
-            "TP: Max Local Bidirectional Stream Data (%llu bytes)",
+            "TP: Max Local Bidirectional Stream Data (%" PRIu64 " bytes)",
             TransportParams->InitialMaxStreamDataBidiLocal);
     }
     if (TransportParams->Flags & QUIC_TP_FLAG_INITIAL_MAX_STRM_DATA_BIDI_REMOTE) {
@@ -949,7 +949,7 @@ QuicCryptoTlsEncodeTransportParameters(
         QuicTraceLogConnVerbose(
             EncodeTPInitMaxStreamDataBidiRemote,
             Connection,
-            "TP: Max Remote Bidirectional Stream Data (%llu bytes)",
+            "TP: Max Remote Bidirectional Stream Data (%" PRIu64 " bytes)",
             TransportParams->InitialMaxStreamDataBidiRemote);
     }
     if (TransportParams->Flags & QUIC_TP_FLAG_INITIAL_MAX_STRM_DATA_UNI) {
@@ -960,7 +960,7 @@ QuicCryptoTlsEncodeTransportParameters(
         QuicTraceLogConnVerbose(
             EncodeTPInitMaxStreamUni,
             Connection,
-            "TP: Max Unidirectional Stream Data (%llu)",
+            "TP: Max Unidirectional Stream Data (%" PRIu64 ")",
             TransportParams->InitialMaxStreamDataUni);
     }
     if (TransportParams->Flags & QUIC_TP_FLAG_INITIAL_MAX_STRMS_BIDI) {
@@ -971,7 +971,7 @@ QuicCryptoTlsEncodeTransportParameters(
         QuicTraceLogConnVerbose(
             EncodeTPMaxBidiStreams,
             Connection,
-            "TP: Max Bidirectional Streams (%llu)",
+            "TP: Max Bidirectional Streams (%" PRIu64 ")",
             TransportParams->InitialMaxBidiStreams);
     }
     if (TransportParams->Flags & QUIC_TP_FLAG_INITIAL_MAX_STRMS_UNI) {
@@ -982,7 +982,7 @@ QuicCryptoTlsEncodeTransportParameters(
         QuicTraceLogConnVerbose(
             EncodeTPMaxUniStreams,
             Connection,
-            "TP: Max Unidirectional Streams (%llu)",
+            "TP: Max Unidirectional Streams (%" PRIu64 ")",
             TransportParams->InitialMaxUniStreams);
     }
     if (TransportParams->Flags & QUIC_TP_FLAG_ACK_DELAY_EXPONENT) {
@@ -993,7 +993,7 @@ QuicCryptoTlsEncodeTransportParameters(
         QuicTraceLogConnVerbose(
             EncodeTPAckDelayExponent,
             Connection,
-            "TP: ACK Delay Exponent (%llu)",
+            "TP: ACK Delay Exponent (%" PRIu64 ")",
             TransportParams->AckDelayExponent);
     }
     if (TransportParams->Flags & QUIC_TP_FLAG_MAX_ACK_DELAY) {
@@ -1004,7 +1004,7 @@ QuicCryptoTlsEncodeTransportParameters(
         QuicTraceLogConnVerbose(
             EncodeTPMaxAckDelay,
             Connection,
-            "TP: Max ACK Delay (%llu ms)",
+            "TP: Max ACK Delay (%" PRIu64 " ms)",
             TransportParams->MaxAckDelay);
     }
     if (TransportParams->Flags & QUIC_TP_FLAG_DISABLE_ACTIVE_MIGRATION) {
@@ -1036,7 +1036,7 @@ QuicCryptoTlsEncodeTransportParameters(
         QuicTraceLogConnVerbose(
             EncodeTPCIDLimit,
             Connection,
-            "TP: Connection ID Limit (%llu)",
+            "TP: Connection ID Limit (%" PRIu64 ")",
             TransportParams->ActiveConnectionIdLimit);
     }
     if (TransportParams->Flags & QUIC_TP_FLAG_INITIAL_SOURCE_CONNECTION_ID) {
@@ -1078,7 +1078,7 @@ QuicCryptoTlsEncodeTransportParameters(
         QuicTraceLogConnVerbose(
             EncodeMaxDatagramFrameSize,
             Connection,
-            "TP: Max Datagram Frame Size (%llu bytes)",
+            "TP: Max Datagram Frame Size (%" PRIu64 " bytes)",
             TransportParams->MaxDatagramFrameSize);
     }
     if (TransportParams->Flags & QUIC_TP_FLAG_DISABLE_1RTT_ENCRYPTION) {
@@ -1103,7 +1103,7 @@ QuicCryptoTlsEncodeTransportParameters(
         QuicTraceLogConnVerbose(
             EncodeTPVersionNegotiationExt,
             Connection,
-            "TP: Version Negotiation Extension (%llu bytes)",
+            "TP: Version Negotiation Extension (%" PRIu64 " bytes)",
             TransportParams->VersionNegotiationInfoLength);
     }
     if (TransportParams->Flags & QUIC_TP_FLAG_MIN_ACK_DELAY) {
@@ -1114,7 +1114,7 @@ QuicCryptoTlsEncodeTransportParameters(
         QuicTraceLogConnVerbose(
             EncodeTPMinAckDelay,
             Connection,
-            "TP: Min ACK Delay (%llu us)",
+            "TP: Min ACK Delay (%" PRIu64 " us)",
             TransportParams->MinAckDelay);
     }
     if (TestParam != NULL) {
@@ -1280,7 +1280,7 @@ QuicCryptoTlsDecodeTransportParameters(
             QuicTraceLogConnVerbose(
                 DecodeTPIdleTimeout,
                 Connection,
-                "TP: Idle Timeout (%llu ms)",
+                "TP: Idle Timeout (%" PRIu64 " ms)",
                 TransportParams->IdleTimeout);
             break;
 
@@ -1345,7 +1345,7 @@ QuicCryptoTlsDecodeTransportParameters(
             QuicTraceLogConnVerbose(
                 DecodeTPMaxUdpPayloadSize,
                 Connection,
-                "TP: Max Udp Payload Size (%llu bytes)",
+                "TP: Max Udp Payload Size (%" PRIu64 " bytes)",
                 TransportParams->MaxUdpPayloadSize);
             break;
 
@@ -1363,7 +1363,7 @@ QuicCryptoTlsDecodeTransportParameters(
             QuicTraceLogConnVerbose(
                 DecodeTPInitMaxData,
                 Connection,
-                "TP: Max Data (%llu bytes)",
+                "TP: Max Data (%" PRIu64 " bytes)",
                 TransportParams->InitialMaxData);
             break;
 
@@ -1381,7 +1381,7 @@ QuicCryptoTlsDecodeTransportParameters(
             QuicTraceLogConnVerbose(
                 DecodeTPInitMaxStreamDataBidiLocal,
                 Connection,
-                "TP: Max Local Bidirectional Stream Data (%llu bytes)",
+                "TP: Max Local Bidirectional Stream Data (%" PRIu64 " bytes)",
                 TransportParams->InitialMaxStreamDataBidiLocal);
             break;
 
@@ -1399,7 +1399,7 @@ QuicCryptoTlsDecodeTransportParameters(
             QuicTraceLogConnVerbose(
                 DecodeTPInitMaxStreamDataBidiRemote,
                 Connection,
-                "TP: Max Remote Bidirectional Stream Data (%llu bytes)",
+                "TP: Max Remote Bidirectional Stream Data (%" PRIu64 " bytes)",
                 TransportParams->InitialMaxStreamDataBidiRemote);
             break;
 
@@ -1417,7 +1417,7 @@ QuicCryptoTlsDecodeTransportParameters(
             QuicTraceLogConnVerbose(
                 DecodeTPInitMaxStreamDataBidiUni,
                 Connection,
-                "TP: Max Unidirectional Stream Data (%llu)",
+                "TP: Max Unidirectional Stream Data (%" PRIu64 ")",
                 TransportParams->InitialMaxStreamDataUni);
             break;
 
@@ -1451,7 +1451,7 @@ QuicCryptoTlsDecodeTransportParameters(
             QuicTraceLogConnVerbose(
                 DecodeTPMaxBidiStreams,
                 Connection,
-                "TP: Max Bidirectional Streams (%llu)",
+                "TP: Max Bidirectional Streams (%" PRIu64 ")",
                 TransportParams->InitialMaxBidiStreams);
             break;
 
@@ -1477,7 +1477,7 @@ QuicCryptoTlsDecodeTransportParameters(
             QuicTraceLogConnVerbose(
                 DecodeTPMaxUniStreams,
                 Connection,
-                "TP: Max Unidirectional Streams (%llu)",
+                "TP: Max Unidirectional Streams (%" PRIu64 ")",
                 TransportParams->InitialMaxUniStreams);
             break;
 
@@ -1503,7 +1503,7 @@ QuicCryptoTlsDecodeTransportParameters(
             QuicTraceLogConnVerbose(
                 DecodeTPAckDelayExponent,
                 Connection,
-                "TP: ACK Delay Exponent (%llu)",
+                "TP: ACK Delay Exponent (%" PRIu64 ")",
                 TransportParams->AckDelayExponent);
             break;
 
@@ -1529,7 +1529,7 @@ QuicCryptoTlsDecodeTransportParameters(
             QuicTraceLogConnVerbose(
                 DecodeTPMaxAckDelay,
                 Connection,
-                "TP: Max ACK Delay (%llu ms)",
+                "TP: Max ACK Delay (%" PRIu64 " ms)",
                 TransportParams->MaxAckDelay);
             break;
 
@@ -1588,7 +1588,7 @@ QuicCryptoTlsDecodeTransportParameters(
             QuicTraceLogConnVerbose(
                 DecodeTPCIDLimit,
                 Connection,
-                "TP: Connection ID Limit (%llu)",
+                "TP: Connection ID Limit (%" PRIu64 ")",
                 TransportParams->ActiveConnectionIdLimit);
             break;
 
@@ -1663,7 +1663,7 @@ QuicCryptoTlsDecodeTransportParameters(
             QuicTraceLogConnVerbose(
                 DecodeTPMaxDatagramFrameSize,
                 Connection,
-                "TP: Max Datagram Frame Size (%llu bytes)",
+                "TP: Max Datagram Frame Size (%" PRIu64 " bytes)",
                 TransportParams->MaxDatagramFrameSize);
             break;
 
@@ -1737,7 +1737,7 @@ QuicCryptoTlsDecodeTransportParameters(
             QuicTraceLogConnVerbose(
                 DecodeTPMinAckDelay,
                 Connection,
-                "TP: Min ACK Delay (%llu us)",
+                "TP: Min ACK Delay (%" PRIu64 " us)",
                 TransportParams->MinAckDelay);
             break;
 
@@ -1746,14 +1746,14 @@ QuicCryptoTlsDecodeTransportParameters(
                 QuicTraceLogConnWarning(
                     DecodeTPReserved,
                     Connection,
-                    "TP: Reserved ID %llu, length %hu",
+                    "TP: Reserved ID %" PRIu64 ", length %hu",
                     Id,
                     Length);
             } else {
                 QuicTraceLogConnWarning(
                     DecodeTPUnknown,
                     Connection,
-                    "TP: Unknown ID %llu, length %hu",
+                    "TP: Unknown ID %" PRIu64 ", length %hu",
                     Id,
                     Length);
             }

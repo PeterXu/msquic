@@ -331,7 +331,7 @@ QuicPacketGenerateRetryIntegrity(
     if (RetryPseudoPacket == NULL) {
         QuicTraceEvent(
             AllocFailure,
-            "Allocation of '%s' failed. (%llu bytes)",
+            "Allocation of '%s' failed. (%" PRIu64 " bytes)",
             "RetryPseudoPacket",
             RetryPseudoPacketLength);
         Status = QUIC_STATUS_OUT_OF_MEMORY;
@@ -556,7 +556,7 @@ QuicPacketLogHeader(
         case QUIC_VERSION_VER_NEG: {
             QuicTraceLogVerbose(
                 LogPacketVersionNegotiation,
-                "[%c][%cX][-] VerNeg DestCid:%s SrcCid:%s (Payload %lu bytes)",
+                "[%c][%cX][-] VerNeg DestCid:%s SrcCid:%s (Payload %u bytes)",
                 PtkConnPre(Connection),
                 (uint8_t)PktRxPre(Rx),
                 QuicCidBufToStr(DestCid, DestCidLen).Buffer,
@@ -622,7 +622,7 @@ QuicPacketLogHeader(
             if (LongHdr->Type == QUIC_INITIAL) {
                 QuicTraceLogVerbose(
                     LogPacketLongHeaderInitial,
-                    "[%c][%cX][%llu] LH Ver:0x%x DestCid:%s SrcCid:%s Type:I (Token %hu bytes) (Payload %hu bytes)",
+                    "[%c][%cX][%" PRIu64 "] LH Ver:0x%x DestCid:%s SrcCid:%s Type:I (Token %hu bytes) (Payload %hu bytes)",
                     PtkConnPre(Connection),
                     PktRxPre(Rx),
                     PacketNumber,
@@ -634,7 +634,7 @@ QuicPacketLogHeader(
             } else {
                 QuicTraceLogVerbose(
                     LogPacketLongHeader,
-                    "[%c][%cX][%llu] LH Ver:0x%x DestCid:%s SrcCid:%s Type:%s (Payload %hu bytes)",
+                    "[%c][%cX][%" PRIu64 "] LH Ver:0x%x DestCid:%s SrcCid:%s Type:%s (Payload %hu bytes)",
                     PtkConnPre(Connection),
                     PktRxPre(Rx),
                     PacketNumber,
@@ -650,7 +650,7 @@ QuicPacketLogHeader(
         default:
             QuicTraceLogVerbose(
                 LogPacketLongHeaderUnsupported,
-                "[%c][%cX][%llu] LH Ver:[UNSUPPORTED,0x%x] DestCid:%s SrcCid:%s",
+                "[%c][%cX][%" PRIu64 "] LH Ver:[UNSUPPORTED,0x%x] DestCid:%s SrcCid:%s",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber,
@@ -676,7 +676,7 @@ QuicPacketLogHeader(
 
             QuicTraceLogVerbose(
                 LogPacketShortHeader,
-                "[%c][%cX][%llu] SH DestCid:%s KP:%hu SB:%hu (Payload %hu bytes)",
+                "[%c][%cX][%" PRIu64 "] SH DestCid:%s KP:%hu SB:%hu (Payload %hu bytes)",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber,
@@ -743,7 +743,7 @@ QuicPacketLogDropWithValue(
         InterlockedIncrement64((int64_t*)&((QUIC_CONNECTION*)Owner)->Stats.Recv.DroppedPackets);
         QuicTraceEvent(
             ConnDropPacketEx,
-            "[conn][%p] DROP packet Value=%llu Dst=%!ADDR! Src=%!ADDR! Reason=%s.",
+            "[conn][%p] DROP packet Value=%" PRIu64 " Dst=%!ADDR! Src=%!ADDR! Reason=%s.",
             Owner,
             Value,
             CLOG_BYTEARRAY(sizeof(Datagram->Tuple->LocalAddress), &Datagram->Tuple->LocalAddress),
@@ -753,7 +753,7 @@ QuicPacketLogDropWithValue(
         InterlockedIncrement64((int64_t*)&((QUIC_BINDING*)Owner)->Stats.Recv.DroppedPackets);
         QuicTraceEvent(
             BindingDropPacketEx,
-            "[bind][%p] DROP packet %llu. Dst=%!ADDR! Src=%!ADDR! Reason=%s",
+            "[bind][%p] DROP packet %" PRIu64 ". Dst=%!ADDR! Src=%!ADDR! Reason=%s",
             Owner,
             Value,
             CLOG_BYTEARRAY(sizeof(Datagram->Tuple->LocalAddress), &Datagram->Tuple->LocalAddress),

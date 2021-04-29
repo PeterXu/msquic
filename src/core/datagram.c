@@ -437,7 +437,7 @@ QuicDatagramSendFlush(
         QuicTraceLogConnVerbose(
             DatagramSendQueued,
             Connection,
-            "Datagram [%p] queued with %llu bytes (flags 0x%x)",
+            "Datagram [%p] queued with %" PRIu64 " bytes (flags 0x%x)",
             SendRequest,
             SendRequest->TotalLength,
             SendRequest->Flags);

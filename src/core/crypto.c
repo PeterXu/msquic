@@ -61,7 +61,7 @@ QuicCryptoDumpSendState(
             QuicTraceLogConnVerbose(
                 CryptoDumpUnacked,
                 Connection,
-                "  unACKed: [%llu, %llu]",
+                "  unACKed: [%" PRIu64 ", %" PRIu64 "]",
                 UnAcked,
                 Sack->Low);
             UnAcked = Sack->Low + Sack->Count;
@@ -70,7 +70,7 @@ QuicCryptoDumpSendState(
             QuicTraceLogConnVerbose(
                 CryptoDumpUnacked2,
                 Connection,
-                "  unACKed: [%llu, %u]",
+                "  unACKed: [%" PRIu64 ", %u]",
                 UnAcked,
                 Crypto->MaxSentLength);
         }
@@ -973,7 +973,7 @@ QuicCryptoOnLoss(
         QuicTraceLogConnVerbose(
             RecoverCrypto,
             Connection,
-            "Recovering crypto from %llu up to %llu",
+            "Recovering crypto from %" PRIu64 " up to %" PRIu64 "",
             Start,
             End);
 
@@ -1198,7 +1198,7 @@ QuicCryptoProcessDataFrame(
     QuicTraceLogConnVerbose(
         RecvCrypto,
         Connection,
-        "Received %hu crypto bytes, offset=%llu Ready=%hhu",
+        "Received %hu crypto bytes, offset=%" PRIu64 " Ready=%hhu",
         (uint16_t)Frame->Length,
         Frame->Offset,
         *DataReady);

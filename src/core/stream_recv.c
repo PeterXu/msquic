@@ -136,7 +136,7 @@ QuicStreamRecvQueueFlush(
         } else {
             QuicTraceEvent(
                 AllocFailure,
-                "Allocation of '%s' failed. (%llu bytes)",
+                "Allocation of '%s' failed. (%" PRIu64 " bytes)",
                 "Flush Stream Recv operation",
                 0);
         }
@@ -221,7 +221,7 @@ QuicStreamProcessResetFrame(
             QuicTraceLogStreamVerbose(
                 IndicatePeerSendAbort,
                 Stream,
-                "Indicating QUIC_STREAM_EVENT_PEER_SEND_ABORTED (0x%llX)",
+                "Indicating QUIC_STREAM_EVENT_PEER_SEND_ABORTED (0x%" PRIX64 ")",
                 ErrorCode);
             (void)QuicStreamIndicateEvent(Stream, &Event);
         }
@@ -267,7 +267,7 @@ QuicStreamProcessStopSendingFrame(
         QuicTraceLogStreamVerbose(
             IndicatePeerReceiveAborted,
             Stream,
-            "Indicating QUIC_STREAM_EVENT_PEER_RECEIVE_ABORTED (0x%llX)",
+            "Indicating QUIC_STREAM_EVENT_PEER_RECEIVE_ABORTED (0x%" PRIX64 ")",
             ErrorCode);
         (void)QuicStreamIndicateEvent(Stream, &Event);
 
@@ -423,7 +423,7 @@ QuicStreamProcessStreamFrame(
     QuicTraceLogStreamVerbose(
         Receive,
         Stream,
-        "Received %hu bytes, offset=%llu Ready=%hhu",
+        "Received %hu bytes, offset=%" PRIu64 " Ready=%hhu",
         (uint16_t)Frame->Length,
         Frame->Offset,
         ReadyToDeliver);
@@ -545,7 +545,7 @@ QuicStreamRecv(
         QuicTraceLogStreamVerbose(
             RemoteBlocked,
             Stream,
-            "Remote FC blocked (%llu)",
+            "Remote FC blocked (%" PRIu64 ")",
             Frame.StreamDataLimit);
 
         QuicSendSetStreamSendFlag(
@@ -760,7 +760,7 @@ QuicStreamRecvFlush(
         QuicTraceLogStreamVerbose(
             IndicateReceive,
             Stream,
-            "Indicating QUIC_STREAM_EVENT_RECEIVE [%llu bytes, %u buffers, 0x%x flags]",
+            "Indicating QUIC_STREAM_EVENT_RECEIVE [%" PRIu64 " bytes, %u buffers, 0x%x flags]",
             Event.RECEIVE.TotalBufferLength,
             Event.RECEIVE.BufferCount,
             Event.RECEIVE.Flags);
@@ -844,7 +844,7 @@ QuicStreamReceiveComplete(
     QuicTraceLogStreamVerbose(
         ReceiveComplete,
         Stream,
-        "Recv complete (%llu bytes)",
+        "Recv complete (%" PRIu64 " bytes)",
         BufferLength);
 
     //

@@ -555,7 +555,7 @@ QuicStreamSendFlush(
         QuicTraceLogStreamVerbose(
             SendQueued,
             Stream,
-            "Send Request [%p] queued with %llu bytes at offset %llu (flags 0x%x)",
+            "Send Request [%p] queued with %" PRIu64 " bytes at offset %" PRIu64 " (flags 0x%x)",
             SendRequest,
             SendRequest->TotalLength,
             SendRequest->StreamOffset,
@@ -767,7 +767,7 @@ QuicStreamWriteOneFrame(
     QuicTraceLogStreamVerbose(
         AddFrame,
         Stream,
-        "Built stream frame, offset=%llu len=%lu fin=%hhu",
+        "Built stream frame, offset=%" PRIu64 " len=%u fin=%hhu",
         Frame.Offset,
         (uint16_t)Frame.Length,
         Frame.Fin);
@@ -1253,7 +1253,7 @@ QuicStreamOnLoss(
         QuicTraceLogStreamVerbose(
             RecoverRange,
             Stream,
-            "Recovering offset %llu up to %llu",
+            "Recovering offset %" PRIu64 " up to %" PRIu64 "",
             Start,
             End);
         AddSendFlags |= QUIC_STREAM_SEND_FLAG_DATA;
@@ -1306,7 +1306,7 @@ QuicStreamOnAck(
     QuicTraceLogStreamVerbose(
         AckRange,
         Stream,
-        "Received ack for %d bytes, offset=%llu, FF=0x%hx",
+        "Received ack for %d bytes, offset=%" PRIu64 ", FF=0x%hx",
         (int32_t)Length,
         Offset,
         FrameMetadata->Flags);
@@ -1317,7 +1317,7 @@ QuicStreamOnAck(
         QuicTraceLogStreamVerbose(
             Send0RttUpdated,
             Stream,
-            "Updated sent 0RTT length to %llu",
+            "Updated sent 0RTT length to %" PRIu64 "",
             FollowingOffset);
     }
 
@@ -1499,7 +1499,7 @@ QuicStreamSendDumpState(
         QuicTraceLogStreamVerbose(
             SendDump,
             Stream,
-            "SF:%hX FC:%llu QS:%llu MAX:%llu UNA:%llu NXT:%llu RECOV:%llu-%llu",
+            "SF:%hX FC:%" PRIu64 " QS:%" PRIu64 " MAX:%" PRIu64 " UNA:%" PRIu64 " NXT:%" PRIu64 " RECOV:%" PRIu64 "-%" PRIu64 "",
             Stream->SendFlags,
             Stream->MaxAllowedSendOffset,
             Stream->QueuedSendOffset,
@@ -1516,7 +1516,7 @@ QuicStreamSendDumpState(
             QuicTraceLogStreamVerbose(
                 SendDumpAck,
                 Stream,
-                "  unACKed: [%llu, %llu]",
+                "  unACKed: [%" PRIu64 ", %" PRIu64 "]",
                 UnAcked,
                 Sack->Low);
             UnAcked = Sack->Low + Sack->Count;
@@ -1525,7 +1525,7 @@ QuicStreamSendDumpState(
             QuicTraceLogStreamVerbose(
                 SendDumpAck,
                 Stream,
-                "  unACKed: [%llu, %llu]",
+                "  unACKed: [%" PRIu64 ", %" PRIu64 "]",
                 UnAcked,
                 Stream->MaxSentLength);
         }

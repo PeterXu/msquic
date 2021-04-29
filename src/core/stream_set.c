@@ -104,7 +104,7 @@ QuicStreamSetInsertStream(
         if (!CxPlatHashtableInitialize(&StreamSet->StreamTable, CXPLAT_HASH_MIN_SIZE)) {
             QuicTraceEvent(
                 AllocFailure,
-                "Allocation of '%s' failed. (%llu bytes)",
+                "Allocation of '%s' failed. (%" PRIu64 " bytes)",
                 "streamset hash table",
                 0);
             return FALSE;
@@ -367,7 +367,7 @@ QuicStreamSetUpdateMaxStreams(
         QuicTraceLogConnVerbose(
             PeerStreamCountsUpdated,
             Connection,
-            "Peer updated max stream count (%hhu, %llu).",
+            "Peer updated max stream count (%hhu, %" PRIu64 ").",
             BidirectionalStreams,
             MaxStreams);
 

@@ -136,7 +136,7 @@ QuicAckTrackerAckPacket(
 
     QuicTraceLogVerbose(
         PacketRxMarkedForAck,
-        "[%c][RX][%llu] Marked for ACK (ECN=%hhu)",
+        "[%c][RX][%" PRIu64 "] Marked for ACK (ECN=%hhu)",
         PtkConnPre(Connection),
         PacketNumber,
         (uint8_t)ECN);

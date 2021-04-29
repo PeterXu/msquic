@@ -1327,7 +1327,7 @@ QuicConnIndicateShutdownBegin(
         QuicTraceLogConnVerbose(
             IndicateShutdownByPeer,
             Connection,
-            "Indicating QUIC_CONNECTION_EVENT_SHUTDOWN_INITIATED_BY_PEER [0x%llx]",
+            "Indicating QUIC_CONNECTION_EVENT_SHUTDOWN_INITIATED_BY_PEER [0x%" PRIx64 "]",
             Event.SHUTDOWN_INITIATED_BY_PEER.ErrorCode);
     } else {
         Event.Type = QUIC_CONNECTION_EVENT_SHUTDOWN_INITIATED_BY_TRANSPORT;
@@ -3655,7 +3655,7 @@ QuicConnRecvPrepareDecrypt(
             QuicTraceLogConnVerbose(
                 PossiblePeerKeyUpdate,
                 Connection,
-                "Possible peer initiated key update [packet %llu]",
+                "Possible peer initiated key update [packet %" PRIu64 "]",
                 Packet->PacketNumber);
 
             QUIC_STATUS Status = QuicCryptoGenerateNewKeys(Connection);
@@ -3911,7 +3911,7 @@ QuicConnRecvDecryptAndAuthenticate(
             QuicTraceLogConnVerbose(
                 UpdateReadKeyPhase,
                 Connection,
-                "Updating current read key phase and packet number[%llu]",
+                "Updating current read key phase and packet number[%" PRIu64 "]",
                 Packet->PacketNumber);
 
         } else if (Packet->KeyType == QUIC_PACKET_KEY_1_RTT &&
@@ -3924,7 +3924,7 @@ QuicConnRecvDecryptAndAuthenticate(
             QuicTraceLogConnVerbose(
                 UpdateReadKeyPhase,
                 Connection,
-                "Updating current read key phase and packet number[%llu]",
+                "Updating current read key phase and packet number[%" PRIu64 "]",
                 Packet->PacketNumber);
         }
     }
@@ -4288,7 +4288,7 @@ QuicConnRecvFrames(
                 QuicTraceLogConnWarning(
                     IgnoreFrameAfterClose,
                     Connection,
-                    "Ignoring frame (%hhu) for already closed stream id = %llu",
+                    "Ignoring frame (%hhu) for already closed stream id = %" PRIu64 "",
                     (uint8_t)FrameType, // This cast is safe because of the switch cases above.
                     StreamId);
                 if (!QuicStreamFrameSkip(
@@ -4395,7 +4395,7 @@ QuicConnRecvFrames(
             QuicTraceLogConnVerbose(
                 PeerConnFCBlocked,
                 Connection,
-                "Peer Connection FC blocked (%llu)",
+                "Peer Connection FC blocked (%" PRIu64 ")",
                 Frame.DataLimit);
             QuicSendSetSendFlag(&Connection->Send, QUIC_CONN_SEND_FLAG_MAX_DATA);
 
@@ -4424,7 +4424,7 @@ QuicConnRecvFrames(
             QuicTraceLogConnVerbose(
                 PeerStreamFCBlocked,
                 Connection,
-                "Peer Streams[%hu] FC blocked (%llu)",
+                "Peer Streams[%hu] FC blocked (%" PRIu64 ")",
                 Frame.BidirectionalStreams,
                 Frame.StreamLimit);
             AckPacketImmediately = TRUE;
@@ -4784,7 +4784,7 @@ Done:
     if (Connection->State.HandleShutdown || Connection->State.HandleClosed) {
         QuicTraceLogVerbose(
             PacketRxNotAcked,
-            "[%c][RX][%llu] not acked (connection is closed)",
+            "[%c][RX][%" PRIu64 "] not acked (connection is closed)",
             PtkConnPre(Connection),
             Packet->PacketNumber);
 

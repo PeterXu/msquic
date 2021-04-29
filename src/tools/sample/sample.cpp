@@ -40,6 +40,15 @@ Abstract:
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "quic_platform.h"
+#include "quic_trace.h"
+
+#include <sys/socket.h>
+#include <sys/errno.h>
+#ifndef INVALID_SOCKET
+#define INVALID_SOCKET (-1)
+#endif
+
 //
 // The (optional) registration configuration for the app. This sets a name for
 // the app (used for persistent storage and for debugging). It also configures
@@ -60,18 +69,20 @@ const uint16_t UdpPort = 4567;
 //
 // The default idle timeout period (1 second) used for the protocol.
 //
-const uint64_t IdleTimeoutMs = 1000;
+const uint64_t IdleTimeoutMs = 30000;
 
 //
 // The length of buffer sent over the streams in the protocol.
 //
-const uint32_t SendBufferLength = 100;
+//const uint32_t SendBufferLength = 100;
 
 //
 // The QUIC API/function table returned from MsQuicOpen. It contains all the
 // functions called by the app to interact with MsQuic.
 //
 const QUIC_API_TABLE* MsQuic;
+
+HQUIC gListener = nullptr;
 
 //
 // The QUIC handle to the registration object. This is the top level API object
@@ -155,26 +166,178 @@ DecodeHexBuffer(
     return HexBufferLen;
 }
 
+bool IsQuicPacket(const char* data, size_t) {
+    const uint8_t* u = reinterpret_cast<const uint8_t*>(data);
+    return (u[0] >= 195 && u[0] <= 255) || (u[0] >= 64 && u[0] <= 127); 
+}
+
+QUIC_BUFFER *
+AllocateBuffer(
+    _In_ const char *Buffer,
+    _In_ uint32_t Length
+    )
+{
+    if (!Buffer || Length <= 0) {
+        printf("Buffer/Length invalid: %u", Length);
+        return nullptr;
+    }
+
+    //
+    // Allocates and builds the buffer to send over the stream.
+    //
+    auto DataBufferRaw = malloc(sizeof(QUIC_BUFFER) + Length);
+    if (DataBufferRaw == nullptr) {
+        printf("Buffer allocation failed!\n");
+        return nullptr;
+    }
+    auto DataBuffer = (QUIC_BUFFER*)DataBufferRaw;
+    DataBuffer->Buffer = (uint8_t*)DataBufferRaw + sizeof(QUIC_BUFFER);
+    DataBuffer->Length = Length;
+    memcpy(DataBuffer->Buffer, Buffer, Length);
+    return DataBuffer;
+}
+
+
+
+void
+StreamEventRecv(
+    _In_ HQUIC Stream,
+    _In_opt_ void* /* Context */,
+    _Inout_ QUIC_STREAM_EVENT* Event
+    )
+{
+    switch (Event->Type) {
+    case QUIC_STREAM_EVENT_RECEIVE:
+        //
+        // Data was received from the peer on the stream.
+        //
+        {
+        uint32_t BufferCount = Event->RECEIVE.BufferCount;
+        uint64_t TotalBytes = 0;
+        char Buffer[1024] = {0};
+        for (uint32_t i = 0; i < Event->RECEIVE.BufferCount; ++i) {
+            uint32_t DataLength = Event->RECEIVE.Buffers[i].Length;
+            TotalBytes += DataLength;
+
+            uint32_t BufferLength = sizeof(Buffer) - 1;
+            if (BufferLength >= DataLength) BufferLength = DataLength;
+            memset(Buffer, 0, sizeof(Buffer));
+            memcpy(Buffer, Event->RECEIVE.Buffers[i].Buffer, BufferLength);
+            printf("[strm][%p] Data received str: %s\n", Stream, Buffer);
+        }
+        printf("[strm][%p] Data received: %u_%" PRIu64 "\n", Stream, BufferCount, TotalBytes);
+        break;
+        }
+    default:
+        break;
+    }
+}
+
+void
+DatagramEventRecv(
+    _In_ HQUIC Connection,
+    _In_opt_ void* /* Context */,
+    _Inout_ QUIC_CONNECTION_EVENT* Event
+    )
+{
+    char Buffer[1024] = {0};
+    uint32_t DataLength = Event->DATAGRAM_RECEIVED.Buffer->Length;
+    if (DataLength > 0) {
+        uint32_t BufferLength = sizeof(Buffer) - 1;
+        if (BufferLength >= DataLength) BufferLength = DataLength;
+        memset(Buffer, 0, sizeof(Buffer));
+        memcpy(Buffer, Event->DATAGRAM_RECEIVED.Buffer->Buffer, BufferLength);
+    }
+    printf("[dgrm][%p] Data received str: %s\n", Connection, Buffer);
+}
+
+bool
+DatagramEventSend(
+    _In_ HQUIC Owner,
+    _In_ const char *Buffer,
+    _In_ uint32_t Length
+    )
+{
+    auto SendBuffer = AllocateBuffer(Buffer, Length);
+    if (!SendBuffer) {
+        return false;
+    }
+
+    printf("[dgrm][%p] Sending data...\n", Owner);
+
+    QUIC_STATUS Status;
+    if (QUIC_FAILED(Status = MsQuic->DatagramSend(Owner, SendBuffer, 1, QUIC_SEND_FLAG_NONE, SendBuffer))) {
+        printf("StreamSend failed, 0x%x!\n", Status);
+        auto SendBufferRaw = (void *)SendBuffer;
+        free(SendBufferRaw);
+        return false;
+    }
+
+    return true;
+}
+
+
+bool use_external_server = false;
+int udp_socket = INVALID_SOCKET;
+struct sockaddr_in peer_addr;
+
+int recv_udp_data(int socket, char *buffer, size_t length) 
+{
+    struct sockaddr_in cliaddr;
+    memset(&cliaddr, 0, sizeof(cliaddr));
+    socklen_t addrlen = sizeof(cliaddr);
+    int n = recvfrom(socket, buffer, length, 0, (struct sockaddr *)&cliaddr, &addrlen);
+    if (n > 0) {
+        if (memcmp(&peer_addr, &cliaddr, sizeof(peer_addr)) != 0) {
+            printf("[server] set peer addr\n");
+            memcpy(&peer_addr, &cliaddr, sizeof(peer_addr));
+        }
+    }
+    return n;
+}
+
+bool send_udp_to(int socket, struct sockaddr_in *toaddr, const char *data, size_t length)
+{
+    socklen_t addrlen = sizeof(struct sockaddr_in);
+    int ret = sendto(socket, data, length, 0, (struct sockaddr *)toaddr, addrlen);
+    printf("[server], send ret=%d, err=%d_%s\n", ret, errno, strerror(errno));
+    if (ret <= 0) {
+        return false;
+    }
+    return true;
+}
+
+bool send_udp_data(int socket, int port, const char *data, size_t length)
+{
+    struct sockaddr_in servaddr;
+    memset(&servaddr, 0, sizeof(servaddr));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_port = htons(port);
+    servaddr.sin_addr.s_addr = INADDR_ANY;
+    return send_udp_to(socket, &servaddr, data, length);
+}
+
+
+
 //
 // Allocates and sends some data over a QUIC stream.
 //
 void
 ServerSend(
-    _In_ HQUIC Stream
+    _In_ HQUIC Stream,
+    _In_ const char *Buffer,
+    _In_ uint32_t Length
     )
 {
     //
     // Allocates and builds the buffer to send over the stream.
     //
-    auto SendBufferRaw = malloc(sizeof(QUIC_BUFFER) + SendBufferLength);
-    if (SendBufferRaw == nullptr) {
+    auto SendBuffer = AllocateBuffer(Buffer, Length);
+    if (SendBuffer == nullptr) {
         printf("SendBuffer allocation failed!\n");
         MsQuic->StreamShutdown(Stream, QUIC_STREAM_SHUTDOWN_FLAG_ABORT, 0);
         return;
     }
-    auto SendBuffer = (QUIC_BUFFER*)SendBufferRaw;
-    SendBuffer->Buffer = (uint8_t*)SendBufferRaw + sizeof(QUIC_BUFFER);
-    SendBuffer->Length = SendBufferLength;
 
     printf("[strm][%p] Sending data...\n", Stream);
 
@@ -184,8 +347,9 @@ ServerSend(
     // the stream is shut down (in the send direction) immediately after.
     //
     QUIC_STATUS Status;
-    if (QUIC_FAILED(Status = MsQuic->StreamSend(Stream, SendBuffer, 1, QUIC_SEND_FLAG_FIN, SendBuffer))) {
+    if (QUIC_FAILED(Status = MsQuic->StreamSend(Stream, SendBuffer, 1, QUIC_SEND_FLAG_NONE, SendBuffer))) {
         printf("StreamSend failed, 0x%x!\n", Status);
+        auto SendBufferRaw = (void *)SendBuffer;
         free(SendBufferRaw);
         MsQuic->StreamShutdown(Stream, QUIC_STREAM_SHUTDOWN_FLAG_ABORT, 0);
     }
@@ -217,14 +381,14 @@ ServerStreamCallback(
         //
         // Data was received from the peer on the stream.
         //
-        printf("[strm][%p] Data received\n", Stream);
+        StreamEventRecv(Stream, NULL, Event);
         break;
     case QUIC_STREAM_EVENT_PEER_SEND_SHUTDOWN:
         //
         // The peer gracefully shut down its send direction of the stream.
         //
         printf("[strm][%p] Peer shut down\n", Stream);
-        ServerSend(Stream);
+        ServerSend(Stream, "Test From Server", 16);
         break;
     case QUIC_STREAM_EVENT_PEER_SEND_ABORTED:
         //
@@ -280,7 +444,7 @@ ServerConnectionCallback(
         //
         // The connection was explicitly shut down by the peer.
         //
-        printf("[conn][%p] Shut down by peer, 0x%llu\n", Connection, (unsigned long long)Event->SHUTDOWN_INITIATED_BY_PEER.ErrorCode);
+        printf("[conn][%p] Shut down by peer, 0x%" PRIu64 "\n", Connection, Event->SHUTDOWN_INITIATED_BY_PEER.ErrorCode);
         break;
     case QUIC_CONNECTION_EVENT_SHUTDOWN_COMPLETE:
         //
@@ -304,6 +468,13 @@ ServerConnectionCallback(
         // connection's session.
         //
         printf("[conn][%p] Connection resumed!\n", Connection);
+        break;
+    case QUIC_CONNECTION_EVENT_DATAGRAM_STATE_CHANGED:
+        printf("[conn][%p] Datagrams unreliable event\n", Connection);
+        break;
+    case QUIC_CONNECTION_EVENT_DATAGRAM_RECEIVED:
+        DatagramEventRecv(Connection, NULL, Event);
+        DatagramEventSend(Connection, "Reply datagram to Client", 24);
         break;
     default:
         break;
@@ -385,6 +556,10 @@ ServerLoadConfiguration(
     memset(&Config, 0, sizeof(Config));
     Config.CredConfig.Flags = QUIC_CREDENTIAL_FLAG_NONE;
 
+    // Set unreliable Datagrams
+    Settings.DatagramReceiveEnabled = 1;
+    Settings.IsSet.DatagramReceiveEnabled = TRUE;
+
     const char* Cert;
     const char* KeyFile;
     if ((Cert = GetValue(argc, argv, "cert_hash")) != nullptr) {
@@ -448,6 +623,57 @@ ServerLoadConfiguration(
     return true;
 }
 
+_IRQL_requires_max_(PASSIVE_LEVEL)
+_Function_class_(QUIC_EXTERNAL_OUTPUT_CALLBACK)
+QUIC_STATUS
+QUIC_API
+ServerOutputCallback(
+    _In_ HQUIC /* Listener */,
+    _In_opt_ void* /* Context */,
+    _In_ void* Buffer,
+    _In_ size_t Length
+    )
+{
+    uint8_t *Data = (uint8_t *)Buffer;
+    printf("[server] output length=%zu, isquic=%d_%d\n", Length, (int)Data[0], IsQuicPacket((char *)Buffer, Length));
+    send_udp_to(udp_socket, &peer_addr, (char *)Buffer, Length);
+    return 0;
+}
+
+void ServerExternalInput(HQUIC Listener, char* Buffer, size_t Length)
+{
+    MsQuic->ListenerExternalInput(Listener, Buffer, Length);
+}
+
+void start_external_server(int port) {
+    printf("[server] start external port:%d\n", port);
+    int sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock == INVALID_SOCKET) {
+        return;
+    }
+
+    udp_socket = sock;
+    struct sockaddr_in servaddr;
+    memset(&servaddr, 0, sizeof(servaddr));
+    servaddr.sin_family    = AF_INET;
+    servaddr.sin_addr.s_addr = INADDR_ANY;
+    servaddr.sin_port = htons(port);
+    if (bind(sock, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
+        return;
+    }
+
+    printf("[server] socket[%d] recving\n", sock);
+    char buffer[4096] = {0};
+    while(1) {
+        int nret = recv_udp_data(sock, buffer, sizeof(buffer));
+        if (nret <= 0) break;
+        uint8_t *Data = (uint8_t *)buffer;
+        printf("[server] recving: %d, isquic=%d_%d\n", nret, (int)Data[0], IsQuicPacket(buffer, nret));
+        ServerExternalInput(gListener, buffer, nret);
+    }
+    printf("[server] quiting ...\n");
+}
+
 //
 // Runs the server side of the protocol.
 //
@@ -459,6 +685,9 @@ RunServer(
 {
     QUIC_STATUS Status;
     HQUIC Listener = nullptr;
+
+    use_external_server = true;
+    QUIC_EXTERNAL_OUTPUT_CALLBACK_HANDLER Callback = use_external_server?ServerOutputCallback:NULL;
 
     //
     // Configures the address used for the listener to listen on all IP
@@ -483,12 +712,18 @@ RunServer(
         goto Error;
     }
 
+    gListener = Listener;
+
     //
     // Starts listening for incoming connections.
     //
-    if (QUIC_FAILED(Status = MsQuic->ListenerStart(Listener, &Alpn, 1, &Address))) {
+    if (QUIC_FAILED(Status = MsQuic->ListenerStartEx(Listener, &Alpn, 1, &Address, Callback))) {
         printf("ListenerStart failed, 0x%x!\n", Status);
         goto Error;
+    }
+
+    if (use_external_server) {
+        start_external_server(UdpPort);
     }
 
     //
@@ -530,7 +765,7 @@ ClientStreamCallback(
         //
         // Data was received from the peer on the stream.
         //
-        printf("[strm][%p] Data received\n", Stream);
+        StreamEventRecv(Stream, NULL, Event);
         break;
     case QUIC_STREAM_EVENT_PEER_SEND_ABORTED:
         //
@@ -560,13 +795,14 @@ ClientStreamCallback(
 
 void
 ClientSend(
-    _In_ HQUIC Connection
+    _In_ HQUIC Connection,
+    _In_ const char *Buffer,
+    _In_ uint32_t Length
     )
 {
     QUIC_STATUS Status;
+    QUIC_BUFFER *SendBuffer;
     HQUIC Stream = nullptr;
-    uint8_t* SendBufferRaw;
-    QUIC_BUFFER* SendBuffer;
 
     //
     // Create/allocate a new bidirectional stream. The stream is just allocated
@@ -592,15 +828,12 @@ ClientSend(
     //
     // Allocates and builds the buffer to send over the stream.
     //
-    SendBufferRaw = (uint8_t*)malloc(sizeof(QUIC_BUFFER) + SendBufferLength);
-    if (SendBufferRaw == nullptr) {
+    SendBuffer = AllocateBuffer(Buffer, Length);
+    if (SendBuffer == nullptr) {
         printf("SendBuffer allocation failed!\n");
         Status = QUIC_STATUS_OUT_OF_MEMORY;
         goto Error;
     }
-    SendBuffer = (QUIC_BUFFER*)SendBufferRaw;
-    SendBuffer->Buffer = SendBufferRaw + sizeof(QUIC_BUFFER);
-    SendBuffer->Length = SendBufferLength;
 
     printf("[strm][%p] Sending data...\n", Stream);
 
@@ -609,8 +842,9 @@ ClientSend(
     // the buffer. This indicates this is the last buffer on the stream and the
     // the stream is shut down (in the send direction) immediately after.
     //
-    if (QUIC_FAILED(Status = MsQuic->StreamSend(Stream, SendBuffer, 1, QUIC_SEND_FLAG_FIN, SendBuffer))) {
+    if (QUIC_FAILED(Status = MsQuic->StreamSend(Stream, SendBuffer, 1, QUIC_SEND_FLAG_NONE, SendBuffer))) {
         printf("StreamSend failed, 0x%x!\n", Status);
+        auto SendBufferRaw = (void *)SendBuffer;
         free(SendBufferRaw);
         goto Error;
     }
@@ -641,7 +875,7 @@ ClientConnectionCallback(
         // The handshake has completed for the connection.
         //
         printf("[conn][%p] Connected\n", Connection);
-        ClientSend(Connection);
+        ClientSend(Connection, "Test From Client", 16);
         break;
     case QUIC_CONNECTION_EVENT_SHUTDOWN_INITIATED_BY_TRANSPORT:
         //
@@ -655,7 +889,7 @@ ClientConnectionCallback(
         //
         // The connection was explicitly shut down by the peer.
         //
-        printf("[conn][%p] Shut down by peer, 0x%llu\n", Connection, (unsigned long long)Event->SHUTDOWN_INITIATED_BY_PEER.ErrorCode);
+        printf("[conn][%p] Shut down by peer, 0x%" PRIu64 "\n", Connection, Event->SHUTDOWN_INITIATED_BY_PEER.ErrorCode);
         break;
     case QUIC_CONNECTION_EVENT_SHUTDOWN_COMPLETE:
         //
@@ -677,6 +911,13 @@ ClientConnectionCallback(
             printf("%.2X", (uint8_t)Event->RESUMPTION_TICKET_RECEIVED.ResumptionTicket[i]);
         }
         printf("\n");
+        break;
+    case QUIC_CONNECTION_EVENT_DATAGRAM_STATE_CHANGED:
+        printf("[conn][%p] Datagrams unreliable event\n", Connection);
+        DatagramEventSend(Connection, "Send datagram to Server", 24);
+        break;
+    case QUIC_CONNECTION_EVENT_DATAGRAM_RECEIVED:
+        DatagramEventRecv(Connection, NULL, Event);
         break;
     default:
         break;
@@ -707,6 +948,10 @@ ClientLoadConfiguration(
     Settings.DesiredVersionsList = &Version;
     Settings.DesiredVersionsListLength = 1;
     Settings.IsSet.DesiredVersionsList = TRUE;
+
+    // Set unreliable Datagrams
+    Settings.DatagramReceiveEnabled = 1;
+    Settings.IsSet.DatagramReceiveEnabled = TRUE;
 
     //
     // Configures a default client configuration, optionally disabling
