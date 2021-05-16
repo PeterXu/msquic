@@ -629,7 +629,7 @@ CxPlatDataPathInitialize(
     if (Datapath == NULL) {
         QuicTraceEvent(
             AllocFailure,
-            "Allocation of '%s' failed. (%llu bytes)",
+            "Allocation of '%s' failed. (%lu bytes)",
             "CXPLAT_DATAPATH",
             DatapathLength);
         Status = QUIC_STATUS_OUT_OF_MEMORY;
@@ -726,7 +726,7 @@ CxPlatDataPathAllocRecvBlock(
     if (RecvBlock == NULL) {
         QuicTraceEvent(
             AllocFailure,
-            "Allocation of '%s' failed. (%llu bytes)",
+            "Allocation of '%s' failed. (%lu bytes)",
             "CXPLAT_DATAPATH_RECV_BLOCK",
             0);
     } else {
@@ -921,6 +921,7 @@ CxPlatSocketConfigureRss(
 QUIC_STATUS
 CxPlatSocketContextInitialize(
     _Inout_ CXPLAT_SOCKET_CONTEXT* SocketContext,
+    _In_ BOOLEAN External,
     _In_ const QUIC_ADDR* LocalAddress,
     _In_ const QUIC_ADDR* RemoteAddress
     )
@@ -968,6 +969,11 @@ CxPlatSocketContextInitialize(
             Binding,
             Status,
             "epoll_ctl(EPOLL_CTL_ADD) failed");
+        goto Exit;
+    }
+
+    if (External) {
+        SocketContext->SocketFd = INVALID_SOCKET;
         goto Exit;
     }
 
@@ -1304,9 +1310,9 @@ CxPlatSocketContextUninitialize(
     _In_ CXPLAT_SOCKET_CONTEXT* SocketContext
     )
 {
-    int EpollRes =
+    //int EpollRes =
         epoll_ctl(SocketContext->ProcContext->EpollFd, EPOLL_CTL_DEL, SocketContext->SocketFd, NULL);
-    CXPLAT_FRE_ASSERT(EpollRes == 0);
+    //CXPLAT_FRE_ASSERT(EpollRes == 0);
 
     const eventfd_t Value = 1;
     eventfd_write(SocketContext->CleanupFd, Value);
@@ -1332,30 +1338,35 @@ CxPlatSocketContextUninitializeComplete(
     }
 
     int EpollFd = SocketContext->ProcContext->EpollFd;
+    if (SocketContext->SocketFd != INVALID_SOCKET) {
     epoll_ctl(EpollFd, EPOLL_CTL_DEL, SocketContext->SocketFd, NULL);
+    }
     epoll_ctl(EpollFd, EPOLL_CTL_DEL, SocketContext->CleanupFd, NULL);
     close(SocketContext->CleanupFd);
+    if (SocketContext->SocketFd != INVALID_SOCKET) {
     close(SocketContext->SocketFd);
+    }
 
     CxPlatRundownRelease(&SocketContext->Binding->Rundown);
 }
 
 QUIC_STATUS
 CxPlatSocketContextPrepareReceive(
-    _In_ CXPLAT_SOCKET_CONTEXT* SocketContext
+    _In_ CXPLAT_SOCKET_CONTEXT* SocketContext,
+    _In_ ssize_t MaxReceive
     )
 {
     CxPlatZeroMemory(&SocketContext->RecvMsgHdr, sizeof(SocketContext->RecvMsgHdr));
     CxPlatZeroMemory(&SocketContext->RecvMsgControl, sizeof(SocketContext->RecvMsgControl));
 
-    for (ssize_t i = 0; i < CXPLAT_MAX_BATCH_RECEIVE; i++) {
+    for (ssize_t i = 0; i < MaxReceive; i++) {
         if (SocketContext->CurrentRecvBlocks[i] == NULL) {
             SocketContext->CurrentRecvBlocks[i] =
                 CxPlatDataPathAllocRecvBlock(SocketContext->ProcContext);
             if (SocketContext->CurrentRecvBlocks[i] == NULL) {
                 QuicTraceEvent(
                     AllocFailure,
-                    "Allocation of '%s' failed. (%llu bytes)",
+                    "Allocation of '%s' failed. (%lu bytes)",
                     "CXPLAT_DATAPATH_RECV_BLOCK",
                     0);
                 return QUIC_STATUS_OUT_OF_MEMORY;
@@ -1381,11 +1392,67 @@ CxPlatSocketContextPrepareReceive(
 }
 
 QUIC_STATUS
+CxPlatSocketDeliverReceivePacket(
+    _In_ CXPLAT_SOCKET* BindingSocket,
+    _In_ const char *Buffer,
+    _In_ uint32_t Length
+    )
+{
+    QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
+    CXPLAT_SOCKET_CONTEXT* SocketContext = &BindingSocket->SocketContexts[0];
+
+    Status = CxPlatSocketContextPrepareReceive(SocketContext, 1);
+    if (Status != QUIC_STATUS_SUCCESS) {
+        return Status;
+    }
+
+    CXPLAT_RECV_DATA* RecvPacket = &SocketContext->CurrentRecvBlocks[0]->RecvPacket;
+    SocketContext->CurrentRecvBlocks[0] = NULL;
+
+    QUIC_ADDR* LocalAddr = &RecvPacket->Tuple->LocalAddress;
+    if (LocalAddr->Ipv6.sin6_family == AF_INET6) {
+        LocalAddr->Ipv6.sin6_family = QUIC_ADDRESS_FAMILY_INET6;
+    }
+    QUIC_ADDR* RemoteAddr = &RecvPacket->Tuple->RemoteAddress;
+    if (RemoteAddr->Ipv6.sin6_family == AF_INET6) {
+        RemoteAddr->Ipv6.sin6_family = QUIC_ADDRESS_FAMILY_INET6;
+        CxPlatConvertFromMappedV6(RemoteAddr, RemoteAddr);
+    }
+
+    RecvPacket->TypeOfService = 0;
+
+    uint32_t BytesTransferred = Length;
+    QuicTraceEvent(
+        DatapathRecv,
+        "[data][%p] Recv %u bytes (segment=%hu) Src=%!ADDR! Dst=%!ADDR!",
+        SocketContext->Binding,
+        (uint32_t)BytesTransferred,
+        (uint32_t)BytesTransferred,
+        CLOG_BYTEARRAY(sizeof(*LocalAddr), LocalAddr),
+        CLOG_BYTEARRAY(sizeof(*RemoteAddr), RemoteAddr));
+
+    CXPLAT_DBG_ASSERT(BytesTransferred <= RecvPacket->BufferLength);
+    RecvPacket->BufferLength = BytesTransferred;
+    memcpy(RecvPacket->Buffer, Buffer, Length);
+    RecvPacket->PartitionIndex = SocketContext->ProcContext->Index;
+
+    {
+        CXPLAT_DBG_ASSERT(SocketContext->Binding->Datapath->UdpHandlers.Receive);
+        SocketContext->Binding->Datapath->UdpHandlers.Receive(
+            SocketContext->Binding,
+            SocketContext->Binding->ClientContext,
+            RecvPacket);
+    }
+
+    return Status;
+}
+
+QUIC_STATUS
 CxPlatSocketContextStartReceive(
     _In_ CXPLAT_SOCKET_CONTEXT* SocketContext
     )
 {
-    QUIC_STATUS Status = CxPlatSocketContextPrepareReceive(SocketContext);
+    QUIC_STATUS Status = CxPlatSocketContextPrepareReceive(SocketContext, CXPLAT_MAX_BATCH_RECEIVE);
     if (QUIC_FAILED(Status)) {
         goto Error;
     }
@@ -1540,7 +1607,7 @@ CxPlatSocketContextRecvComplete(
     }
 
 Drop:
-    Status = CxPlatSocketContextPrepareReceive(SocketContext);
+    Status = CxPlatSocketContextPrepareReceive(SocketContext, CXPLAT_MAX_BATCH_RECEIVE);
 
     //
     // Prepare can only fail under low memory condition. Treat it as a fatal
@@ -1765,6 +1832,7 @@ CxPlatSocketCreateUdp(
     _Out_ CXPLAT_SOCKET** NewBinding
     )
 {
+    BOOLEAN External = InternalFlags & CXPLAT_SOCKET_FLAG_NOP;
     QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
     BOOLEAN IsServerSocket = RemoteAddress == NULL;
 
@@ -1783,7 +1851,7 @@ CxPlatSocketCreateUdp(
         Status = QUIC_STATUS_OUT_OF_MEMORY;
         QuicTraceEvent(
             AllocFailure,
-            "Allocation of '%s' failed. (%llu bytes)",
+            "Allocation of '%s' failed. (%lu bytes)",
             "CXPLAT_SOCKET",
             BindingLength);
         goto Exit;
@@ -1829,6 +1897,7 @@ CxPlatSocketCreateUdp(
         Status =
             CxPlatSocketContextInitialize(
                 &Binding->SocketContexts[i],
+                External,
                 LocalAddress,
                 RemoteAddress);
         if (QUIC_FAILED(Status)) {
@@ -1861,6 +1930,7 @@ CxPlatSocketCreateUdp(
     //
     *NewBinding = Binding;
 
+    if (!External) {
     for (uint32_t i = 0; i < SocketCount; i++) {
         Status =
             CxPlatSocketContextStartReceive(
@@ -1868,6 +1938,7 @@ CxPlatSocketCreateUdp(
         if (QUIC_FAILED(Status)) {
             goto Exit;
         }
+    }
     }
 
     Status = QUIC_STATUS_SUCCESS;
@@ -2070,7 +2141,7 @@ CxPlatSendDataAlloc(
     if (SendData == NULL) {
         QuicTraceEvent(
             AllocFailure,
-            "Allocation of '%s' failed. (%llu bytes)",
+            "Allocation of '%s' failed. (%lu bytes)",
             "CXPLAT_SEND_DATA",
             0);
         goto Exit;
@@ -2376,6 +2447,7 @@ CxPlatSocketSendInternal(
     CXPLAT_STATIC_ASSERT(
         CMSG_SPACE(sizeof(struct in6_pktinfo)) >= CMSG_SPACE(sizeof(struct in_pktinfo)),
         "sizeof(struct in6_pktinfo) >= sizeof(struct in_pktinfo) failed");
+
     char ControlBuffer[
         CMSG_SPACE(sizeof(struct in6_pktinfo)) +
         CMSG_SPACE(sizeof(int))
@@ -2422,6 +2494,20 @@ CxPlatSocketSendInternal(
         CxPlatLockRelease(&SocketContext->PendingSendDataLock);
         if (SendPending) {
             Status = QUIC_STATUS_PENDING;
+            goto Exit;
+        }
+    }
+
+    if (Socket->Datapath->UdpHandlers.ExternalOutput != NULL) {
+        size_t Start = SendData->SentMessagesCount;
+        BOOLEAN Processed = Socket->Datapath->UdpHandlers.ExternalOutput(
+            Socket,
+            Socket->ClientContext,
+            &SendData->Buffers[Start],
+            SendData->BufferCount - Start
+            );
+        if (Processed) {
+            SendData->SentMessagesCount += SendData->TotalSize;
             goto Exit;
         }
     }

@@ -125,6 +125,7 @@ QuicMainStart(
         Binding = nullptr;
         const CXPLAT_UDP_DATAPATH_CALLBACKS DatapathCallbacks = {
             DatapathReceive,
+            NULL,
             DatapathUnreachable
         };
         Status = CxPlatDataPathInitialize(0, &DatapathCallbacks, NULL, &Datapath);

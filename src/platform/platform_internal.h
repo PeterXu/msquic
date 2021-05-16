@@ -102,6 +102,7 @@ extern CX_PLATFORM CxPlatform;
 // Internal flags used with CxPlatSocketCreateUdp
 //
 #define CXPLAT_SOCKET_FLAG_PCP  0x00000001
+#define CXPLAT_SOCKET_FLAG_NOP  0x00000002
 
 //
 // PCP Receive Callback

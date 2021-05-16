@@ -37,6 +37,11 @@ Abstract:
 #include <new.h>
 #endif
 
+#ifndef min
+#define min(a,b) ((a)<=(b)?(a):(b))
+#endif
+
+
 #define QUIC_TEST_SESSION_CLOSED    1
 
 extern

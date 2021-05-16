@@ -94,7 +94,7 @@ RpsClient::Init(
         WorkerCount -= 2;
     }
 
-    uint32_t ThreadCount;
+    uint32_t ThreadCount = 0;
     if (TryGetValue(argc, argv, "threads", &ThreadCount) && ThreadCount < WorkerCount) {
         WorkerCount = ThreadCount;
     }

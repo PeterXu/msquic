@@ -233,6 +233,7 @@ MsQuicLibraryInitialize(
     uint32_t DefaultMaxPartitionCount = QUIC_MAX_PARTITION_COUNT;
     const CXPLAT_UDP_DATAPATH_CALLBACKS DatapathCallbacks = {
         QuicBindingReceive,
+        QuicBindingExternalOutput,
         QuicBindingUnreachable
     };
 
@@ -1229,7 +1230,9 @@ MsQuicOpen(
     Api->ListenerOpen = MsQuicListenerOpen;
     Api->ListenerClose = MsQuicListenerClose;
     Api->ListenerStart = MsQuicListenerStart;
+    Api->ListenerStartEx = MsQuicListenerStartEx;
     Api->ListenerStop = MsQuicListenerStop;
+    Api->ListenerExternalInput = MsQuicListenerExternalInput;
 
     Api->ConnectionOpen = MsQuicConnectionOpen;
     Api->ConnectionClose = MsQuicConnectionClose;
@@ -1346,6 +1349,28 @@ QuicLibraryGetBinding(
     _Out_ QUIC_BINDING** NewBinding
     )
 {
+    return QuicLibraryGetBindingEx(
+ #ifdef QUIC_COMPARTMENT_ID
+        CompartmentId,
+ #endif
+        ShareBinding, ServerOwned, FALSE, LocalAddress, RemoteAddress, NewBinding
+    );
+}
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+QUIC_STATUS
+QuicLibraryGetBindingEx(
+#ifdef QUIC_COMPARTMENT_ID
+    _In_ QUIC_COMPARTMENT_ID CompartmentId,
+#endif
+    _In_ BOOLEAN ShareBinding,
+    _In_ BOOLEAN ServerOwned,
+    _In_ BOOLEAN ExternalSocket,
+    _In_opt_ const QUIC_ADDR* LocalAddress,
+    _In_opt_ const QUIC_ADDR* RemoteAddress,
+    _Out_ QUIC_BINDING** NewBinding
+    )
+{
     QUIC_STATUS Status = QUIC_STATUS_NOT_FOUND;
     QUIC_BINDING* Binding;
     QUIC_ADDR NewLocalAddress;
@@ -1409,6 +1434,7 @@ NewBinding:
 #endif
             ShareBinding,
             ServerOwned,
+            ExternalSocket,
             LocalAddress,
             RemoteAddress,
             NewBinding);

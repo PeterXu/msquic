@@ -484,6 +484,20 @@ QuicLibraryGetBinding(
     _Out_ QUIC_BINDING** NewBinding
     );
 
+_IRQL_requires_max_(PASSIVE_LEVEL)
+QUIC_STATUS
+QuicLibraryGetBindingEx(
+#ifdef QUIC_COMPARTMENT_ID
+    _In_ QUIC_COMPARTMENT_ID CompartmentId,
+#endif
+    _In_ BOOLEAN ShareBinding,
+    _In_ BOOLEAN ServerOwned,
+    _In_ BOOLEAN ExternalSocket,
+    _In_opt_ const QUIC_ADDR* LocalAddress,
+    _In_opt_ const QUIC_ADDR* RemoteAddress,
+    _Out_ QUIC_BINDING** NewBinding
+    );
+
 //
 // Tries to acquire a ref on the binding. Fails if already starting the clean up
 // process.
