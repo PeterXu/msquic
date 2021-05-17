@@ -407,6 +407,7 @@ QuicDatagramSendFlush(
     }
 
     QUIC_CONNECTION* Connection = QuicDatagramGetConnection(Datagram);
+    QUIC_LIBRARY* Library = Connection->Library;
     while (ApiQueue != NULL) {
 
         QUIC_SEND_REQUEST* SendRequest = ApiQueue;
@@ -449,7 +450,7 @@ QuicDatagramSendFlush(
     }
 
     QuicDatagramValidate(Datagram);
-    QuicPerfCounterAdd(QUIC_PERF_COUNTER_APP_SEND_BYTES, TotalBytesSent);
+    QuicPerfCounterAdd(Library, QUIC_PERF_COUNTER_APP_SEND_BYTES, TotalBytesSent);
 }
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
@@ -547,6 +548,7 @@ QuicDatagramProcessFrame(
     )
 {
     QUIC_CONNECTION* Connection = QuicDatagramGetConnection(Datagram);
+    QUIC_LIBRARY* Library = Connection->Library;
     CXPLAT_DBG_ASSERT(Connection->Settings.DatagramReceiveEnabled);
 
     QUIC_DATAGRAM_EX Frame;
@@ -574,7 +576,7 @@ QuicDatagramProcessFrame(
         (uint16_t)Frame.Length);
     (void)QuicConnIndicateEvent(Connection, &Event);
 
-    QuicPerfCounterAdd(QUIC_PERF_COUNTER_APP_RECV_BYTES, QuicBuffer.Length);
+    QuicPerfCounterAdd(Library, QUIC_PERF_COUNTER_APP_RECV_BYTES, QuicBuffer.Length);
 
     return TRUE;
 }

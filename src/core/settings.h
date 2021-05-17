@@ -55,6 +55,7 @@ QuicSettingsCleanup(
 _IRQL_requires_max_(PASSIVE_LEVEL)
 void
 QuicSettingsLoad(
+    _In_ QUIC_LIBRARY *Library,
     _Inout_ QUIC_SETTINGS* Settings,
     _In_ CXPLAT_STORAGE* Storage
     );

@@ -42,9 +42,9 @@ QuicCidNewNullSource(
 
 QUIC_CID_HASH_ENTRY*
 QuicCidNewRandomSource(
+    _In_ QUIC_LIBRARY* Library,
     _In_opt_ QUIC_CONNECTION* Connection,
-    _In_reads_opt_(MsQuicLib.CidServerIdLength)
-        const void* ServerID,
+    _In_ const void* ServerID,
     _In_ uint16_t PartitionID,
     _In_ uint8_t PrefixLength,
     _In_reads_(PrefixLength)
@@ -137,24 +137,27 @@ QuicIsVersionSupported(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 uint16_t
 QuicLibraryGetCurrentPartition(
-    void
+    QUIC_LIBRARY* Library
     );
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 uint16_t
 QuicPartitionIdCreate(
+    QUIC_LIBRARY* Library,
     uint16_t BaseIndex
     );
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 uint16_t
 QuicPartitionIdGetIndex(
+    QUIC_LIBRARY* Library,
     uint16_t PartitionId
     );
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 uint16_t
 QuicPartitionIndexIncrement(
+    QUIC_LIBRARY* Library,
     uint16_t PartitionIndex,
     uint16_t Increment
     );
@@ -162,6 +165,7 @@ QuicPartitionIndexIncrement(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 uint16_t
 QuicPartitionIndexDecrement(
+    QUIC_LIBRARY* Library,
     uint16_t PartitionIndex,
     uint16_t Decrement
     );
@@ -169,6 +173,7 @@ QuicPartitionIndexDecrement(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 void
 QuicPerfCounterAdd(
+    QUIC_LIBRARY* Library,
     _In_ QUIC_PERFORMANCE_COUNTERS Type,
     _In_ int64_t Value
     );
@@ -176,6 +181,7 @@ QuicPerfCounterAdd(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 void
 QuicPerfCounterTrySnapShot(
+    QUIC_LIBRARY* Library,
     _In_ uint64_t TimeNow
     );
 
@@ -411,6 +417,7 @@ QuicPacketEncodeShortHeaderV1(
 
 uint32_t
 QuicPacketHash(
+    _In_ QUIC_LIBRARY* Library,
     _In_ const QUIC_ADDR* const RemoteAddress,
     _In_ uint8_t RemoteCidLength,
     _In_reads_(RemoteCidLength)
@@ -576,6 +583,7 @@ QuicStreamRecvGetState(
 
 BOOLEAN
 QuicRetryTokenDecrypt(
+    _In_ QUIC_LIBRARY* Library,
     _In_ const CXPLAT_RECV_PACKET* const Packet,
     _In_reads_(sizeof(QUIC_RETRY_TOKEN_CONTENTS))
         const uint8_t* TokenBuffer,

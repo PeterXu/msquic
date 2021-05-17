@@ -85,6 +85,7 @@ MsQuicConfigurationOpen(
     }
 
     CxPlatZeroMemory(Configuration, sizeof(QUIC_CONFIGURATION));
+    Configuration->Library = Registration->Library;
     Configuration->Type = QUIC_HANDLE_TYPE_CONFIGURATION;
     Configuration->ClientContext = Context;
     Configuration->Registration = Registration;
@@ -385,19 +386,20 @@ QuicConfigurationSettingsChanged(
     _Inout_ QUIC_CONFIGURATION* Configuration
     )
 {
+    QUIC_LIBRARY* Library = Configuration->Library;
 #ifdef QUIC_SILO
     if (Configuration->Storage != NULL) {
         QuicSettingsSetDefault(&Configuration->Settings);
         QuicSettingsLoad(&Configuration->Settings, Configuration->Storage);
     } else {
-        QuicSettingsCopy(&Configuration->Settings, &MsQuicLib.Settings);
+        QuicSettingsCopy(&Configuration->Settings, &Library->Settings);
     }
 #else
-    QuicSettingsCopy(&Configuration->Settings, &MsQuicLib.Settings);
+    QuicSettingsCopy(&Configuration->Settings, &Library->Settings);
 #endif
 
     if (Configuration->AppSpecificStorage != NULL) {
-        QuicSettingsLoad(&Configuration->Settings, Configuration->AppSpecificStorage);
+        QuicSettingsLoad(Library, &Configuration->Settings, Configuration->AppSpecificStorage);
     }
 
     QuicTraceLogInfo(

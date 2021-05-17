@@ -489,6 +489,7 @@ QuicCryptoDiscardKeys(
     }
 
     QUIC_CONNECTION* Connection = QuicCryptoGetConnection(Crypto);
+    QUIC_LIBRARY* Library = Connection->Library;
     QuicTraceLogConnInfo(
         DiscardKeyType,
         Connection,
@@ -517,7 +518,7 @@ QuicCryptoDiscardKeys(
     BOOLEAN HasAckElicitingPacketsToAcknowledge =
         Connection->Packets[EncryptLevel]->AckTracker.AckElicitingPacketsToAcknowledge != 0;
     QuicLossDetectionDiscardPackets(&Connection->LossDetection, KeyType);
-    QuicPacketSpaceUninitialize(Connection->Packets[EncryptLevel]);
+    QuicPacketSpaceUninitialize(Library, Connection->Packets[EncryptLevel]);
     Connection->Packets[EncryptLevel] = NULL;
 
     //
@@ -1277,6 +1278,7 @@ QuicCryptoProcessTlsCompletion(
     )
 {
     QUIC_CONNECTION* Connection = QuicCryptoGetConnection(Crypto);
+    QUIC_LIBRARY* Library = Connection->Library;
 
     if (Crypto->ResultFlags & CXPLAT_TLS_RESULT_ERROR) {
         QuicTraceEvent(
@@ -1504,7 +1506,7 @@ QuicCryptoProcessTlsCompletion(
         // CONNECTED event is indicated to the app).
         //
         Connection->State.Connected = TRUE;
-        QuicPerfCounterIncrement(QUIC_PERF_COUNTER_CONN_CONNECTED);
+        QuicPerfCounterIncrement(Library, QUIC_PERF_COUNTER_CONN_CONNECTED);
 
         QuicConnGenerateNewSourceCids(Connection, FALSE);
 
@@ -1536,7 +1538,7 @@ QuicCryptoProcessTlsCompletion(
             Event.CONNECTED.SessionResumed);
         (void)QuicConnIndicateEvent(Connection, &Event);
         if (Crypto->TlsState.SessionResumed) {
-            QuicPerfCounterIncrement(QUIC_PERF_COUNTER_CONN_RESUMED);
+            QuicPerfCounterIncrement(Library, QUIC_PERF_COUNTER_CONN_RESUMED);
         }
         Connection->Stats.ResumptionSucceeded = Crypto->TlsState.SessionResumed;
 

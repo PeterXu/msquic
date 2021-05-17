@@ -33,6 +33,7 @@ typedef struct QUIC_SERVER_VER_NEG_INFO {
 
 BOOLEAN
 QuicVersionNegotiationExtIsVersionServerSupported(
+    _In_ QUIC_LIBRARY* Library,
     _In_ uint32_t Version
     );
 

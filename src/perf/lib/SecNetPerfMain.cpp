@@ -124,6 +124,7 @@ QuicMainStart(
         Datapath = nullptr;
         Binding = nullptr;
         const CXPLAT_UDP_DATAPATH_CALLBACKS DatapathCallbacks = {
+            FALSE,
             DatapathReceive,
             NULL,
             DatapathUnreachable

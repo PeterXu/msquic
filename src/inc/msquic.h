@@ -1305,6 +1305,30 @@ MsQuicClose(
     _In_ _Pre_defensive_ const QUIC_API_TABLE* QuicApi
     );
 
+
+//
+// Custom library
+//
+
+typedef struct QUIC_LIBRARY *HQUIC_LIBRARY;
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+QUIC_STATUS
+QUIC_API
+MsQuicOpenEx(
+    _In_ HQUIC_LIBRARY Library,
+    _Out_ _Pre_defensive_ const QUIC_API_TABLE** QuicApi
+    );
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+void
+QUIC_API
+MsQuicCloseEx(
+    _In_ HQUIC_LIBRARY Library,
+    _In_ _Pre_defensive_ const QUIC_API_TABLE* QuicApi
+    );
+
+
 #if defined(__cplusplus)
 }
 #endif

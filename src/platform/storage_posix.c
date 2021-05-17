@@ -34,6 +34,24 @@ CxPlatStorageOpen(
     return QUIC_STATUS_NOT_SUPPORTED;
 }
 
+QUIC_STATUS
+CxPlatStorageOpenEx(
+    _In_opt_z_ const char * Path,
+    _In_ CXPLAT_STORAGE_CHANGE_CALLBACK_HANDLER_EX Callback,
+    _In_ void* Library,
+    _In_opt_ void* CallbackContext,
+    _Out_ CXPLAT_STORAGE** NewStorage
+    )
+{
+    UNREFERENCED_PARAMETER(Path);
+    UNREFERENCED_PARAMETER(Callback);
+    UNREFERENCED_PARAMETER(Library);
+    UNREFERENCED_PARAMETER(CallbackContext);
+    UNREFERENCED_PARAMETER(NewStorage);
+    // TODO
+    return QUIC_STATUS_NOT_SUPPORTED;
+}
+
 void
 CxPlatStorageClose(
     _In_opt_ CXPLAT_STORAGE* Storage

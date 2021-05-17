@@ -15,6 +15,16 @@ MsQuicRegistrationOpen(
     );
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
+QUIC_STATUS
+QUIC_API
+MsQuicRegistrationOpenEx(
+    _In_ QUIC_LIBRARY* Library,
+    _In_opt_ const QUIC_REGISTRATION_CONFIG* Config,
+    _Outptr_ _At_(*Registration, __drv_allocatesMem(Mem)) _Pre_defensive_
+        HQUIC* Registration
+    );
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
 void
 QUIC_API
 MsQuicRegistrationClose(

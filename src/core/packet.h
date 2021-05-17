@@ -543,6 +543,7 @@ QuicPacketEncodeShortHeaderV1(
 inline
 uint32_t
 QuicPacketHash(
+    _In_ QUIC_LIBRARY* Library,
     _In_ const QUIC_ADDR* const RemoteAddress,
     _In_ uint8_t RemoteCidLength,
     _In_reads_(RemoteCidLength)
@@ -554,24 +555,24 @@ QuicPacketHash(
     if (QuicAddrGetFamily(RemoteAddress) == QUIC_ADDRESS_FAMILY_INET) {
         Key =
             CxPlatToeplitzHashCompute(
-                &MsQuicLib.ToeplitzHash,
+                &Library->ToeplitzHash,
                 ((uint8_t*)RemoteAddress) + QUIC_ADDR_V4_PORT_OFFSET,
                 2, 0);
         Key ^=
             CxPlatToeplitzHashCompute(
-                &MsQuicLib.ToeplitzHash,
+                &Library->ToeplitzHash,
                 ((uint8_t*)RemoteAddress) + QUIC_ADDR_V4_IP_OFFSET,
                 4, 2);
         Offset = 2 + 4;
     } else {
         Key =
             CxPlatToeplitzHashCompute(
-                &MsQuicLib.ToeplitzHash,
+                &Library->ToeplitzHash,
                 ((uint8_t*)RemoteAddress) + QUIC_ADDR_V6_PORT_OFFSET,
                 2, 0);
         Key ^=
             CxPlatToeplitzHashCompute(
-                &MsQuicLib.ToeplitzHash,
+                &Library->ToeplitzHash,
                 ((uint8_t*)RemoteAddress) + QUIC_ADDR_V6_IP_OFFSET,
                 16, 2);
         Offset = 2 + 16;
@@ -580,7 +581,7 @@ QuicPacketHash(
     if (RemoteCidLength != 0) {
         Key ^=
             CxPlatToeplitzHashCompute(
-                &MsQuicLib.ToeplitzHash,
+                &Library->ToeplitzHash,
                 RemoteCid,
                 min(RemoteCidLength, QUIC_MAX_CONNECTION_ID_LENGTH_V1),
                 Offset);

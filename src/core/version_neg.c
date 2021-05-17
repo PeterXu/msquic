@@ -35,15 +35,16 @@ const uint32_t DefaultSupportedVersionsList[3] = {
 
 BOOLEAN
 QuicVersionNegotiationExtIsVersionServerSupported(
+    _In_ QUIC_LIBRARY* Library,
     _In_ uint32_t Version
     )
 {
-    if (MsQuicLib.Settings.IsSet.DesiredVersionsList) {
+    if (Library->Settings.IsSet.DesiredVersionsList) {
         if (QuicIsVersionReserved(Version)) {
             return FALSE;
         }
-        for (uint32_t i = 0; i < MsQuicLib.Settings.DesiredVersionsListLength; ++i) {
-            if (MsQuicLib.Settings.DesiredVersionsList[i] == Version) {
+        for (uint32_t i = 0; i < Library->Settings.DesiredVersionsListLength; ++i) {
+            if (Library->Settings.DesiredVersionsList[i] == Version) {
                 return TRUE;
             }
         }
@@ -103,14 +104,15 @@ QuicVersionNegotiationExtIsVersionCompatible(
     _In_ uint32_t NegotiatedVersion
     )
 {
+    QUIC_LIBRARY* Library = Connection->Library;
     const uint32_t* CompatibleVersions;
     uint32_t CompatibleVersionsLength;
     if (Connection->Settings.IsSet.DesiredVersionsList) {
         CompatibleVersions = Connection->Settings.DesiredVersionsList;
         CompatibleVersionsLength = Connection->Settings.DesiredVersionsListLength;
     } else {
-        CompatibleVersions = MsQuicLib.DefaultCompatibilityList;
-        CompatibleVersionsLength = MsQuicLib.DefaultCompatibilityListLength;
+        CompatibleVersions = Library->DefaultCompatibilityList;
+        CompatibleVersionsLength = Library->DefaultCompatibilityListLength;
     }
 
     for (uint32_t i = 0; i < CompatibleVersionsLength; ++i) {
@@ -379,6 +381,7 @@ QuicVersionNegotiationExtEncodeVersionNegotiationInfo(
     _Out_ uint32_t* VNInfoLength
     )
 {
+    QUIC_LIBRARY* Library = Connection->Library;
     uint32_t VNILen = 0;
     uint8_t* VNIBuf = NULL;
     uint8_t* VersionNegotiationInfo = NULL;
@@ -386,9 +389,9 @@ QuicVersionNegotiationExtEncodeVersionNegotiationInfo(
     if (QuicConnIsServer(Connection)) {
         const uint32_t* DesiredVersionsList = NULL;
         uint32_t DesiredVersionsListLength = 0;
-        if (MsQuicLib.Settings.IsSet.DesiredVersionsList) {
-            DesiredVersionsList = MsQuicLib.Settings.DesiredVersionsList;
-            DesiredVersionsListLength = MsQuicLib.Settings.DesiredVersionsListLength;
+        if (Library->Settings.IsSet.DesiredVersionsList) {
+            DesiredVersionsList = Library->Settings.DesiredVersionsList;
+            DesiredVersionsListLength = Library->Settings.DesiredVersionsListLength;
         } else {
             DesiredVersionsList = DefaultSupportedVersionsList;
             DesiredVersionsListLength = ARRAYSIZE(DefaultSupportedVersionsList);
@@ -445,8 +448,8 @@ QuicVersionNegotiationExtEncodeVersionNegotiationInfo(
             VNILen += QuicVarIntSize(CompatibilityListByteLength / sizeof(uint32_t)) + CompatibilityListByteLength;
         } else {
             VNILen +=
-                QuicVarIntSize(MsQuicLib.DefaultCompatibilityListLength) +
-                (MsQuicLib.DefaultCompatibilityListLength * sizeof(uint32_t));
+                QuicVarIntSize(Library->DefaultCompatibilityListLength) +
+                (Library->DefaultCompatibilityListLength * sizeof(uint32_t));
         }
         VNILen +=
             QuicVarIntSize(Connection->ReceivedNegotiationVersionsLength) +
@@ -488,11 +491,11 @@ QuicVersionNegotiationExtEncodeVersionNegotiationInfo(
                 &RemainingBuffer);
             CXPLAT_DBG_ASSERT(VNILen == (uint32_t)(VNIBuf - VersionNegotiationInfo) + RemainingBuffer);
         } else {
-            VNIBuf = QuicVarIntEncode(MsQuicLib.DefaultCompatibilityListLength, VNIBuf);
+            VNIBuf = QuicVarIntEncode(Library->DefaultCompatibilityListLength, VNIBuf);
             CxPlatCopyMemory(
                 VNIBuf,
-                MsQuicLib.DefaultCompatibilityList,
-                MsQuicLib.DefaultCompatibilityListLength * sizeof(uint32_t));
+                Library->DefaultCompatibilityList,
+                Library->DefaultCompatibilityListLength * sizeof(uint32_t));
         }
         QuicTraceLogConnInfo(
             ClientVersionNegotiationInfoEncoded,
@@ -502,7 +505,7 @@ QuicVersionNegotiationExtEncodeVersionNegotiationInfo(
             Connection->PreviousQuicVersion,
             Connection->ReceivedNegotiationVersionsLength,
             CompatibilityListByteLength == 0 ?
-                MsQuicLib.DefaultCompatibilityListLength :
+                Library->DefaultCompatibilityListLength :
                 (uint32_t)(CompatibilityListByteLength / sizeof(uint32_t)));
 
         QuicTraceEvent(
@@ -511,7 +514,7 @@ QuicVersionNegotiationExtEncodeVersionNegotiationInfo(
             Connection,
             CLOG_BYTEARRAY(
                 CompatibilityListByteLength == 0 ?
-                    MsQuicLib.DefaultCompatibilityListLength * sizeof(uint32_t):
+                    Library->DefaultCompatibilityListLength * sizeof(uint32_t):
                     CompatibilityListByteLength,
                 VNIBuf));
 

@@ -124,7 +124,7 @@ _Function_class_(QUIC_TRACE_RUNDOWN_CALLBACK)
 _IRQL_requires_max_(PASSIVE_LEVEL)
 void
 (QUIC_TRACE_RUNDOWN_CALLBACK)(
-    void
+    void* Context
     );
 
 extern QUIC_TRACE_RUNDOWN_CALLBACK* QuicTraceRundownCallback;
@@ -210,7 +210,7 @@ QuicEtwCallback(
 #define QuicTraceLogErrorEnabled()   TRUE
 #define QuicTraceLogWarningEnabled() TRUE
 #define QuicTraceLogInfoEnabled()    TRUE
-#define QuicTraceLogVerboseEnabled() FALSE
+#define QuicTraceLogVerboseEnabled() TRUE
 
 inline
 void

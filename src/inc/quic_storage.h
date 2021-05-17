@@ -34,6 +34,18 @@ void
 
 typedef CXPLAT_STORAGE_CHANGE_CALLBACK *CXPLAT_STORAGE_CHANGE_CALLBACK_HANDLER;
 
+typedef
+_IRQL_requires_max_(PASSIVE_LEVEL)
+_Function_class_(CXPLAT_STORAGE_CHANGE_CALLBACK)
+void
+(CXPLAT_STORAGE_CHANGE_CALLBACK_EX)(
+    _In_ void* Library,
+    _In_ void* Context
+    );
+
+typedef CXPLAT_STORAGE_CHANGE_CALLBACK_EX *CXPLAT_STORAGE_CHANGE_CALLBACK_HANDLER_EX;
+
+
 //
 // Opens a storage context, registers for change callbacks and returns a
 // handle to it.
@@ -43,6 +55,16 @@ QUIC_STATUS
 CxPlatStorageOpen(
     _In_opt_z_ const char * Path,
     _In_ CXPLAT_STORAGE_CHANGE_CALLBACK_HANDLER Callback,
+    _In_opt_ void* CallbackContext,
+    _Out_ CXPLAT_STORAGE** NewStorage
+    );
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+QUIC_STATUS
+CxPlatStorageOpenEx(
+    _In_opt_z_ const char * Path,
+    _In_ CXPLAT_STORAGE_CHANGE_CALLBACK_HANDLER_EX Callback,
+    _In_ void* Library,
     _In_opt_ void* CallbackContext,
     _Out_ CXPLAT_STORAGE** NewStorage
     );

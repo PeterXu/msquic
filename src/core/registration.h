@@ -106,7 +106,7 @@ typedef struct QUIC_REGISTRATION {
     if (Registration->IsVerifying) { CXPLAT_FRE_ASSERT(Expr); }
 #elif defined(CxPlatVerifierEnabled)
 #define QUIC_REG_VERIFY(Registration, Expr) \
-    if (MsQuicLib.IsVerifying) { CXPLAT_FRE_ASSERT(Expr); }
+    if (Registration->Library->IsVerifying) { CXPLAT_FRE_ASSERT(Expr); }
 #else
 #define QUIC_REG_VERIFY(Registration, Expr)
 #endif
