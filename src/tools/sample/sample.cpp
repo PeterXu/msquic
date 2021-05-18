@@ -80,23 +80,31 @@ const uint64_t IdleTimeoutMs = 30000;
 // The QUIC API/function table returned from MsQuicOpen. It contains all the
 // functions called by the app to interact with MsQuic.
 //
-const QUIC_API_TABLE* MsQuic;
-
-HQUIC gListener = nullptr;
 
 //
 // The QUIC handle to the registration object. This is the top level API object
 // that represents the execution context for all work done by MsQuic on behalf
 // of the app.
 //
-HQUIC Registration;
 
 //
 // The QUIC handle to the configuration object. This object abstracts the
 // connection configuration. This includes TLS configuration and any other
 // QUIC layer settings.
 //
-HQUIC Configuration;
+
+typedef struct QUIC_CONTEXT {
+    HQUIC_LIBRARY Library = nullptr;
+    const QUIC_API_TABLE* MsQuic = nullptr;
+    HQUIC Registration = nullptr;
+
+    HQUIC Configuration = nullptr;
+    HQUIC Listener = nullptr;
+    HQUIC Connection = nullptr;
+    HQUIC Stream = nullptr;
+}QUIC_CONTEXT;
+
+bool gQuic = false;
 
 void PrintUsage()
 {
@@ -206,6 +214,7 @@ StreamEventRecv(
     _Inout_ QUIC_STREAM_EVENT* Event
     )
 {
+    //QUIC_CONTEXT* QuicCtx = (QUIC_CONTEXT *)Context;
     switch (Event->Type) {
     case QUIC_STREAM_EVENT_RECEIVE:
         //
@@ -240,6 +249,7 @@ DatagramEventRecv(
     _Inout_ QUIC_CONNECTION_EVENT* Event
     )
 {
+    //QUIC_CONTEXT* QuicCtx = (QUIC_CONTEXT *)Context;
     char Buffer[1024] = {0};
     uint32_t DataLength = Event->DATAGRAM_RECEIVED.Buffer->Length;
     if (DataLength > 0) {
@@ -253,7 +263,8 @@ DatagramEventRecv(
 
 bool
 DatagramEventSend(
-    _In_ HQUIC Owner,
+    QUIC_CONTEXT* QuicCtx,
+    _In_ HQUIC Connection,
     _In_ const char *Buffer,
     _In_ uint32_t Length
     )
@@ -263,10 +274,10 @@ DatagramEventSend(
         return false;
     }
 
-    printf("[dgrm][%p] Sending data...\n", Owner);
+    printf("[dgrm][%p] Sending data...\n", Connection);
 
     QUIC_STATUS Status;
-    if (QUIC_FAILED(Status = MsQuic->DatagramSend(Owner, SendBuffer, 1, QUIC_SEND_FLAG_NONE, SendBuffer))) {
+    if (QUIC_FAILED(Status = QuicCtx->MsQuic->DatagramSend(Connection, SendBuffer, 1, QUIC_SEND_FLAG_NONE, SendBuffer))) {
         printf("StreamSend failed, 0x%x!\n", Status);
         auto SendBufferRaw = (void *)SendBuffer;
         free(SendBufferRaw);
@@ -277,9 +288,11 @@ DatagramEventSend(
 }
 
 
+// Only For external server
 bool use_external_server = false;
 int udp_socket = INVALID_SOCKET;
 struct sockaddr_in peer_addr;
+
 
 int recv_udp_data(int socket, char *buffer, size_t length) 
 {
@@ -300,7 +313,7 @@ bool send_udp_to(int socket, struct sockaddr_in *toaddr, const char *data, size_
 {
     socklen_t addrlen = sizeof(struct sockaddr_in);
     int ret = sendto(socket, data, length, 0, (struct sockaddr *)toaddr, addrlen);
-    printf("[server], send ret=%d, err=%d_%s\n", ret, errno, strerror(errno));
+    printf("[server:%d], send ret=%d, err=%d_%s\n", socket, ret, errno, strerror(errno));
     if (ret <= 0) {
         return false;
     }
@@ -324,6 +337,7 @@ bool send_udp_data(int socket, int port, const char *data, size_t length)
 //
 void
 ServerSend(
+    QUIC_CONTEXT* QuicCtx,
     _In_ HQUIC Stream,
     _In_ const char *Buffer,
     _In_ uint32_t Length
@@ -335,7 +349,7 @@ ServerSend(
     auto SendBuffer = AllocateBuffer(Buffer, Length);
     if (SendBuffer == nullptr) {
         printf("SendBuffer allocation failed!\n");
-        MsQuic->StreamShutdown(Stream, QUIC_STREAM_SHUTDOWN_FLAG_ABORT, 0);
+        QuicCtx->MsQuic->StreamShutdown(Stream, QUIC_STREAM_SHUTDOWN_FLAG_ABORT, 0);
         return;
     }
 
@@ -347,11 +361,11 @@ ServerSend(
     // the stream is shut down (in the send direction) immediately after.
     //
     QUIC_STATUS Status;
-    if (QUIC_FAILED(Status = MsQuic->StreamSend(Stream, SendBuffer, 1, QUIC_SEND_FLAG_NONE, SendBuffer))) {
+    if (QUIC_FAILED(Status = QuicCtx->MsQuic->StreamSend(Stream, SendBuffer, 1, QUIC_SEND_FLAG_NONE, SendBuffer))) {
         printf("StreamSend failed, 0x%x!\n", Status);
         auto SendBufferRaw = (void *)SendBuffer;
         free(SendBufferRaw);
-        MsQuic->StreamShutdown(Stream, QUIC_STREAM_SHUTDOWN_FLAG_ABORT, 0);
+        QuicCtx->MsQuic->StreamShutdown(Stream, QUIC_STREAM_SHUTDOWN_FLAG_ABORT, 0);
     }
 }
 
@@ -364,10 +378,11 @@ QUIC_STATUS
 QUIC_API
 ServerStreamCallback(
     _In_ HQUIC Stream,
-    _In_opt_ void* /* Context */,
+    _In_opt_ void* Context,
     _Inout_ QUIC_STREAM_EVENT* Event
     )
 {
+    QUIC_CONTEXT* QuicCtx = (QUIC_CONTEXT *)Context;
     switch (Event->Type) {
     case QUIC_STREAM_EVENT_SEND_COMPLETE:
         //
@@ -381,21 +396,24 @@ ServerStreamCallback(
         //
         // Data was received from the peer on the stream.
         //
-        StreamEventRecv(Stream, NULL, Event);
+        StreamEventRecv(Stream, QuicCtx, Event);
+        ServerSend(QuicCtx, Stream, "Server Send Stream to Client", 28);
+		gQuic = true;
         break;
     case QUIC_STREAM_EVENT_PEER_SEND_SHUTDOWN:
         //
         // The peer gracefully shut down its send direction of the stream.
         //
         printf("[strm][%p] Peer shut down\n", Stream);
-        ServerSend(Stream, "Test From Server", 16);
+		gQuic = true;
+        ServerSend(QuicCtx, Stream, "Server Send Stream-shutdown to Client", 37);
         break;
     case QUIC_STREAM_EVENT_PEER_SEND_ABORTED:
         //
         // The peer aborted its send direction of the stream.
         //
         printf("[strm][%p] Peer aborted\n", Stream);
-        MsQuic->StreamShutdown(Stream, QUIC_STREAM_SHUTDOWN_FLAG_ABORT, 0);
+        QuicCtx->MsQuic->StreamShutdown(Stream, QUIC_STREAM_SHUTDOWN_FLAG_ABORT, 0);
         break;
     case QUIC_STREAM_EVENT_SHUTDOWN_COMPLETE:
         //
@@ -403,7 +421,8 @@ ServerStreamCallback(
         // with the stream. It can now be safely cleaned up.
         //
         printf("[strm][%p] All done\n", Stream);
-        MsQuic->StreamClose(Stream);
+        QuicCtx->MsQuic->StreamClose(Stream);
+        QuicCtx->Stream = nullptr;
         break;
     default:
         break;
@@ -420,17 +439,19 @@ QUIC_STATUS
 QUIC_API
 ServerConnectionCallback(
     _In_ HQUIC Connection,
-    _In_opt_ void* /* Context */,
+    _In_opt_ void* Context,
     _Inout_ QUIC_CONNECTION_EVENT* Event
     )
 {
+    QUIC_CONTEXT* QuicCtx = (QUIC_CONTEXT *)Context;
     switch (Event->Type) {
     case QUIC_CONNECTION_EVENT_CONNECTED:
         //
         // The handshake has completed for the connection.
         //
         printf("[conn][%p] Connected\n", Connection);
-        MsQuic->ConnectionSendResumptionTicket(Connection, QUIC_SEND_RESUMPTION_FLAG_NONE, 0, NULL);
+        QuicCtx->Connection = Connection;
+        QuicCtx->MsQuic->ConnectionSendResumptionTicket(Connection, QUIC_SEND_RESUMPTION_FLAG_NONE, 0, NULL);
         break;
     case QUIC_CONNECTION_EVENT_SHUTDOWN_INITIATED_BY_TRANSPORT:
         //
@@ -452,7 +473,8 @@ ServerConnectionCallback(
         // safely cleaned up.
         //
         printf("[conn][%p] All done\n", Connection);
-        MsQuic->ConnectionClose(Connection);
+		if (QuicCtx->Connection != nullptr) {
+		}
         break;
     case QUIC_CONNECTION_EVENT_PEER_STREAM_STARTED:
         //
@@ -460,7 +482,8 @@ ServerConnectionCallback(
         // callback handler before returning.
         //
         printf("[strm][%p] Peer started\n", Event->PEER_STREAM_STARTED.Stream);
-        MsQuic->SetCallbackHandler(Event->PEER_STREAM_STARTED.Stream, (void*)ServerStreamCallback, nullptr);
+        QuicCtx->Stream = Event->PEER_STREAM_STARTED.Stream;
+        QuicCtx->MsQuic->SetCallbackHandler(Event->PEER_STREAM_STARTED.Stream, (void*)ServerStreamCallback, QuicCtx);
         break;
     case QUIC_CONNECTION_EVENT_RESUMED:
         //
@@ -471,10 +494,10 @@ ServerConnectionCallback(
         break;
     case QUIC_CONNECTION_EVENT_DATAGRAM_STATE_CHANGED:
         printf("[conn][%p] Datagrams unreliable event\n", Connection);
+        DatagramEventSend(QuicCtx, Connection, "Server Send datagram to Client", 23);
         break;
     case QUIC_CONNECTION_EVENT_DATAGRAM_RECEIVED:
-        DatagramEventRecv(Connection, NULL, Event);
-        DatagramEventSend(Connection, "Reply datagram to Client", 24);
+        DatagramEventRecv(Connection, QuicCtx, Event);
         break;
     default:
         break;
@@ -491,10 +514,11 @@ QUIC_STATUS
 QUIC_API
 ServerListenerCallback(
     _In_ HQUIC /* Listener */,
-    _In_opt_ void* /* Context */,
+    _In_opt_ void* Context,
     _Inout_ QUIC_LISTENER_EVENT* Event
     )
 {
+    QUIC_CONTEXT* QuicCtx = (QUIC_CONTEXT *)Context;
     QUIC_STATUS Status = QUIC_STATUS_NOT_SUPPORTED;
     switch (Event->Type) {
     case QUIC_LISTENER_EVENT_NEW_CONNECTION:
@@ -503,8 +527,8 @@ ServerListenerCallback(
         // proceed, the server must provide a configuration for QUIC to use. The
         // app MUST set the callback handler before returning.
         //
-        MsQuic->SetCallbackHandler(Event->NEW_CONNECTION.Connection, (void*)ServerConnectionCallback, nullptr);
-        Status = MsQuic->ConnectionSetConfiguration(Event->NEW_CONNECTION.Connection, Configuration);
+        QuicCtx->MsQuic->SetCallbackHandler(Event->NEW_CONNECTION.Connection, (void*)ServerConnectionCallback, Context);
+        Status = QuicCtx->MsQuic->ConnectionSetConfiguration(Event->NEW_CONNECTION.Connection, QuicCtx->Configuration);
         break;
     default:
         break;
@@ -528,6 +552,7 @@ typedef struct QUIC_CREDENTIAL_CONFIG_HELPER {
 //
 bool
 ServerLoadConfiguration(
+    QUIC_CONTEXT* QuicCtx,
     _In_ int argc,
     _In_reads_(argc) _Null_terminated_ char* argv[]
     )
@@ -607,7 +632,8 @@ ServerLoadConfiguration(
     // and settings.
     //
     QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
-    if (QUIC_FAILED(Status = MsQuic->ConfigurationOpen(Registration, &Alpn, 1, &Settings, sizeof(Settings), nullptr, &Configuration))) {
+    if (QUIC_FAILED(Status = QuicCtx->MsQuic->ConfigurationOpen(
+                    QuicCtx->Registration, &Alpn, 1, &Settings, sizeof(Settings), nullptr, &QuicCtx->Configuration))) {
         printf("ConfigurationOpen failed, 0x%x!\n", Status);
         return false;
     }
@@ -615,7 +641,8 @@ ServerLoadConfiguration(
     //
     // Loads the TLS credential part of the configuration.
     //
-    if (QUIC_FAILED(Status = MsQuic->ConfigurationLoadCredential(Configuration, &Config.CredConfig))) {
+    if (QUIC_FAILED(Status = QuicCtx->MsQuic->ConfigurationLoadCredential(
+                    QuicCtx->Configuration, &Config.CredConfig))) {
         printf("ConfigurationLoadCredential failed, 0x%x!\n", Status);
         return false;
     }
@@ -640,17 +667,21 @@ ServerOutputCallback(
     return 0;
 }
 
-void ServerExternalInput(HQUIC Listener, char* Buffer, size_t Length)
+void ServerExternalInput(QUIC_CONTEXT* QuicCtx, char* Buffer, size_t Length)
 {
-    MsQuic->ListenerExternalInput(Listener, Buffer, Length);
+    QuicCtx->MsQuic->ListenerExternalInput(QuicCtx->Listener, Buffer, Length);
 }
 
-void start_external_server(int port) {
+void start_external_server(QUIC_CONTEXT* QuicCtx, int port) {
     printf("[server] start external port:%d\n", port);
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock == INVALID_SOCKET) {
         return;
     }
+
+    int Option = TRUE;
+    int Result = setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, (const void*)&Option, sizeof(Option));
+    printf("[server] setsockopt ret=%d\n", Result);
 
     udp_socket = sock;
     struct sockaddr_in servaddr;
@@ -658,18 +689,20 @@ void start_external_server(int port) {
     servaddr.sin_family    = AF_INET;
     servaddr.sin_addr.s_addr = INADDR_ANY;
     servaddr.sin_port = htons(port);
+    printf("[server] binding\n");
     if (bind(sock, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
+        printf("[server] binding error=%d - %s\n", errno, strerror(errno));
         return;
     }
 
     printf("[server] socket[%d] recving\n", sock);
     char buffer[4096] = {0};
-    while(1) {
+    while(!gQuic) {
         int nret = recv_udp_data(sock, buffer, sizeof(buffer));
         if (nret <= 0) break;
         uint8_t *Data = (uint8_t *)buffer;
         printf("[server] recving: %d, isquic=%d_%d\n", nret, (int)Data[0], IsQuicPacket(buffer, nret));
-        ServerExternalInput(gListener, buffer, nret);
+        ServerExternalInput(QuicCtx, buffer, nret);
     }
     printf("[server] quiting ...\n");
 }
@@ -679,15 +712,14 @@ void start_external_server(int port) {
 //
 void
 RunServer(
+    QUIC_CONTEXT* QuicCtx,
+    BOOLEAN ExternalSocket,
     _In_ int argc,
     _In_reads_(argc) _Null_terminated_ char* argv[]
     )
 {
     QUIC_STATUS Status;
-    HQUIC Listener = nullptr;
-
-    use_external_server = true;
-    QUIC_EXTERNAL_OUTPUT_CALLBACK_HANDLER Callback = use_external_server?ServerOutputCallback:NULL;
+    QUIC_EXTERNAL_OUTPUT_CALLBACK_HANDLER Callback = ExternalSocket?ServerOutputCallback:NULL;
 
     //
     // Configures the address used for the listener to listen on all IP
@@ -700,43 +732,30 @@ RunServer(
     //
     // Load the server configuration based on the command line.
     //
-    if (!ServerLoadConfiguration(argc, argv)) {
+    if (!ServerLoadConfiguration(QuicCtx, argc, argv)) {
         return;
     }
 
     //
     // Create/allocate a new listener object.
     //
-    if (QUIC_FAILED(Status = MsQuic->ListenerOpen(Registration, ServerListenerCallback, nullptr, &Listener))) {
+    if (QUIC_FAILED(Status = QuicCtx->MsQuic->ListenerOpen(
+                    QuicCtx->Registration, ServerListenerCallback, QuicCtx, &QuicCtx->Listener))) {
         printf("ListenerOpen failed, 0x%x!\n", Status);
         goto Error;
     }
 
-    gListener = Listener;
-
     //
     // Starts listening for incoming connections.
     //
-    if (QUIC_FAILED(Status = MsQuic->ListenerStartEx(Listener, &Alpn, 1, &Address, Callback))) {
+    if (QUIC_FAILED(Status = QuicCtx->MsQuic->ListenerStartEx(
+                    QuicCtx->Listener, &Alpn, 1, &Address, Callback))) {
         printf("ListenerStart failed, 0x%x!\n", Status);
         goto Error;
     }
 
-    if (use_external_server) {
-        start_external_server(UdpPort);
-    }
-
-    //
-    // Continue listening for connections until the Enter key is pressed.
-    //
-    printf("Press Enter to exit.\n\n");
-    getchar();
-
 Error:
-
-    if (Listener != nullptr) {
-        MsQuic->ListenerClose(Listener);
-    }
+	return;
 }
 
 //
@@ -748,10 +767,11 @@ QUIC_STATUS
 QUIC_API
 ClientStreamCallback(
     _In_ HQUIC Stream,
-    _In_opt_ void* /* Context */,
+    _In_opt_ void* Context,
     _Inout_ QUIC_STREAM_EVENT* Event
     )
 {
+    QUIC_CONTEXT* QuicCtx = (QUIC_CONTEXT *)Context;
     switch (Event->Type) {
     case QUIC_STREAM_EVENT_SEND_COMPLETE:
         //
@@ -765,7 +785,7 @@ ClientStreamCallback(
         //
         // Data was received from the peer on the stream.
         //
-        StreamEventRecv(Stream, NULL, Event);
+        StreamEventRecv(Stream, QuicCtx, Event);
         break;
     case QUIC_STREAM_EVENT_PEER_SEND_ABORTED:
         //
@@ -785,7 +805,8 @@ ClientStreamCallback(
         // with the stream. It can now be safely cleaned up.
         //
         printf("[strm][%p] All done\n", Stream);
-        MsQuic->StreamClose(Stream);
+        QuicCtx->MsQuic->StreamClose(Stream);
+        QuicCtx->Stream = nullptr;
         break;
     default:
         break;
@@ -795,6 +816,7 @@ ClientStreamCallback(
 
 void
 ClientSend(
+    QUIC_CONTEXT* QuicCtx,
     _In_ HQUIC Connection,
     _In_ const char *Buffer,
     _In_ uint32_t Length
@@ -802,26 +824,28 @@ ClientSend(
 {
     QUIC_STATUS Status;
     QUIC_BUFFER *SendBuffer;
-    HQUIC Stream = nullptr;
 
     //
     // Create/allocate a new bidirectional stream. The stream is just allocated
     // and no QUIC stream identifier is assigned until it's started.
     //
-    if (QUIC_FAILED(Status = MsQuic->StreamOpen(Connection, QUIC_STREAM_OPEN_FLAG_NONE, ClientStreamCallback, nullptr, &Stream))) {
+    printf("[strm] quic context=%p\n", QuicCtx);
+    if (QUIC_FAILED(Status = QuicCtx->MsQuic->StreamOpen(
+                    Connection, QUIC_STREAM_OPEN_FLAG_NONE, ClientStreamCallback, QuicCtx, &QuicCtx->Stream))) {
         printf("StreamOpen failed, 0x%x!\n", Status);
         goto Error;
     }
 
-    printf("[strm][%p] Starting...\n", Stream);
+    printf("[strm][%p] Starting...\n", QuicCtx->Stream);
 
     //
     // Starts the bidirectional stream. By default, the peer is not notified of
     // the stream being started until data is sent on the stream.
     //
-    if (QUIC_FAILED(Status = MsQuic->StreamStart(Stream, QUIC_STREAM_START_FLAG_NONE))) {
+    if (QUIC_FAILED(Status = QuicCtx->MsQuic->StreamStart(QuicCtx->Stream, QUIC_STREAM_START_FLAG_NONE))) {
         printf("StreamStart failed, 0x%x!\n", Status);
-        MsQuic->StreamClose(Stream);
+        QuicCtx->MsQuic->StreamClose(QuicCtx->Stream);
+        QuicCtx->Stream = nullptr;
         goto Error;
     }
 
@@ -835,14 +859,15 @@ ClientSend(
         goto Error;
     }
 
-    printf("[strm][%p] Sending data...\n", Stream);
+    printf("[strm][%p] Sending data...\n", QuicCtx->Stream);
 
     //
     // Sends the buffer over the stream. Note the FIN flag is passed along with
     // the buffer. This indicates this is the last buffer on the stream and the
     // the stream is shut down (in the send direction) immediately after.
     //
-    if (QUIC_FAILED(Status = MsQuic->StreamSend(Stream, SendBuffer, 1, QUIC_SEND_FLAG_NONE, SendBuffer))) {
+    if (QUIC_FAILED(Status = QuicCtx->MsQuic->StreamSend(
+                    QuicCtx->Stream, SendBuffer, 1, QUIC_SEND_FLAG_NONE, SendBuffer))) {
         printf("StreamSend failed, 0x%x!\n", Status);
         auto SendBufferRaw = (void *)SendBuffer;
         free(SendBufferRaw);
@@ -850,10 +875,8 @@ ClientSend(
     }
 
 Error:
+	return;
 
-    if (QUIC_FAILED(Status)) {
-        MsQuic->ConnectionShutdown(Connection, QUIC_CONNECTION_SHUTDOWN_FLAG_NONE, 0);
-    }
 }
 
 //
@@ -865,17 +888,19 @@ QUIC_STATUS
 QUIC_API
 ClientConnectionCallback(
     _In_ HQUIC Connection,
-    _In_opt_ void* /* Context */,
+    _In_opt_ void* Context,
     _Inout_ QUIC_CONNECTION_EVENT* Event
     )
 {
+    QUIC_CONTEXT* QuicCtx = (QUIC_CONTEXT *)Context;
     switch (Event->Type) {
     case QUIC_CONNECTION_EVENT_CONNECTED:
         //
         // The handshake has completed for the connection.
         //
-        printf("[conn][%p] Connected\n", Connection);
-        ClientSend(Connection, "Test From Client", 16);
+        printf("[conn][%p] Connected context[%p]\n", Connection, QuicCtx);
+        QuicCtx->Connection = Connection;
+        ClientSend(QuicCtx, Connection, "Client Send Stream", 18);
         break;
     case QUIC_CONNECTION_EVENT_SHUTDOWN_INITIATED_BY_TRANSPORT:
         //
@@ -898,7 +923,6 @@ ClientConnectionCallback(
         //
         printf("[conn][%p] All done\n", Connection);
         if (!Event->SHUTDOWN_COMPLETE.AppCloseInProgress) {
-            MsQuic->ConnectionClose(Connection);
         }
         break;
     case QUIC_CONNECTION_EVENT_RESUMPTION_TICKET_RECEIVED:
@@ -908,16 +932,16 @@ ClientConnectionCallback(
         //
         printf("[conn][%p] Resumption ticket received (%u bytes):\n", Connection, Event->RESUMPTION_TICKET_RECEIVED.ResumptionTicketLength);
         for (uint32_t i = 0; i < Event->RESUMPTION_TICKET_RECEIVED.ResumptionTicketLength; i++) {
-            printf("%.2X", (uint8_t)Event->RESUMPTION_TICKET_RECEIVED.ResumptionTicket[i]);
+            //printf("%.2X", (uint8_t)Event->RESUMPTION_TICKET_RECEIVED.ResumptionTicket[i]);
         }
         printf("\n");
         break;
     case QUIC_CONNECTION_EVENT_DATAGRAM_STATE_CHANGED:
         printf("[conn][%p] Datagrams unreliable event\n", Connection);
-        DatagramEventSend(Connection, "Send datagram to Server", 24);
+        DatagramEventSend(QuicCtx, Connection, "Client Send datagram to Server", 31);
         break;
     case QUIC_CONNECTION_EVENT_DATAGRAM_RECEIVED:
-        DatagramEventRecv(Connection, NULL, Event);
+        DatagramEventRecv(Connection, QuicCtx, Event);
         break;
     default:
         break;
@@ -930,6 +954,7 @@ ClientConnectionCallback(
 //
 bool
 ClientLoadConfiguration(
+    QUIC_CONTEXT* QuicCtx,
     bool Unsecure
     )
 {
@@ -970,7 +995,8 @@ ClientLoadConfiguration(
     // and settings.
     //
     QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
-    if (QUIC_FAILED(Status = MsQuic->ConfigurationOpen(Registration, &Alpn, 1, &Settings, sizeof(Settings), nullptr, &Configuration))) {
+    if (QUIC_FAILED(Status = QuicCtx->MsQuic->ConfigurationOpen(
+                    QuicCtx->Registration, &Alpn, 1, &Settings, sizeof(Settings), nullptr, &QuicCtx->Configuration))) {
         printf("ConfigurationOpen failed, 0x%x!\n", Status);
         return false;
     }
@@ -979,7 +1005,7 @@ ClientLoadConfiguration(
     // Loads the TLS credential part of the configuration. This is required even
     // on client side, to indicate if a certificate is required or not.
     //
-    if (QUIC_FAILED(Status = MsQuic->ConfigurationLoadCredential(Configuration, &CredConfig))) {
+    if (QUIC_FAILED(Status = QuicCtx->MsQuic->ConfigurationLoadCredential(QuicCtx->Configuration, &CredConfig))) {
         printf("ConfigurationLoadCredential failed, 0x%x!\n", Status);
         return false;
     }
@@ -992,6 +1018,7 @@ ClientLoadConfiguration(
 //
 void
 RunClient(
+    QUIC_CONTEXT* QuicCtx,
     _In_ int argc,
     _In_reads_(argc) _Null_terminated_ char* argv[]
     )
@@ -999,18 +1026,18 @@ RunClient(
     //
     // Load the client configuration based on the "unsecure" command line option.
     //
-    if (!ClientLoadConfiguration(GetValue(argc, argv, "unsecure"))) {
+    if (!ClientLoadConfiguration(QuicCtx, GetValue(argc, argv, "unsecure"))) {
         return;
     }
 
     QUIC_STATUS Status;
     const char* ResumptionTicketString = nullptr;
-    HQUIC Connection = nullptr;
 
     //
     // Allocate a new connection object.
     //
-    if (QUIC_FAILED(Status = MsQuic->ConnectionOpen(Registration, ClientConnectionCallback, nullptr, &Connection))) {
+    if (QUIC_FAILED(Status = QuicCtx->MsQuic->ConnectionOpen(
+                    QuicCtx->Registration, ClientConnectionCallback, QuicCtx, &QuicCtx->Connection))) {
         printf("ConnectionOpen failed, 0x%x!\n", Status);
         goto Error;
     }
@@ -1022,7 +1049,9 @@ RunClient(
         //
         uint8_t ResumptionTicket[1024];
         uint16_t TicketLength = (uint16_t)DecodeHexBuffer(ResumptionTicketString, sizeof(ResumptionTicket), ResumptionTicket);
-        if (QUIC_FAILED(Status = MsQuic->SetParam(Connection, QUIC_PARAM_LEVEL_CONNECTION, QUIC_PARAM_CONN_RESUMPTION_TICKET, TicketLength, ResumptionTicket))) {
+        if (QUIC_FAILED(Status = QuicCtx->MsQuic->SetParam(
+                        QuicCtx->Connection, 
+                        QUIC_PARAM_LEVEL_CONNECTION, QUIC_PARAM_CONN_RESUMPTION_TICKET, TicketLength, ResumptionTicket))) {
             printf("SetParam(QUIC_PARAM_CONN_RESUMPTION_TICKET) failed, 0x%x!\n", Status);
             goto Error;
         }
@@ -1038,20 +1067,83 @@ RunClient(
         goto Error;
     }
 
-    printf("[conn][%p] Connecting...\n", Connection);
+    printf("[conn][%p] Connecting...\n", QuicCtx->Connection);
 
     //
     // Start the connection to the server.
     //
-    if (QUIC_FAILED(Status = MsQuic->ConnectionStart(Connection, Configuration, QUIC_ADDRESS_FAMILY_UNSPEC, Target, UdpPort))) {
+    if (QUIC_FAILED(Status = QuicCtx->MsQuic->ConnectionStart(
+                    QuicCtx->Connection, QuicCtx->Configuration, QUIC_ADDRESS_FAMILY_UNSPEC, Target, UdpPort))) {
         printf("ConnectionStart failed, 0x%x!\n", Status);
         goto Error;
     }
 
 Error:
 
-    if (QUIC_FAILED(Status) && Connection != nullptr) {
-        MsQuic->ConnectionClose(Connection);
+	return;
+}
+
+int InitQuic(QUIC_CONTEXT* QuicCtx, BOOLEAN ExternalSocket) {
+    QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
+
+    HQUIC_LIBRARY Library = MsQuicLibraryOpen(ExternalSocket);
+    if (Library == NULL) {
+        goto Error;
+    }
+    QuicCtx->Library = Library;
+
+    //
+    // Open a handle to the library and get the API function table.
+    //
+    if (QUIC_FAILED(Status = MsQuicOpenEx(Library, &QuicCtx->MsQuic))) {
+        printf("MsQuicOpen failed, 0x%x!\n", Status);
+        goto Error;
+    }
+
+    //
+    // Create a registration for the app's connections.
+    //
+    if (QUIC_FAILED(Status = QuicCtx->MsQuic->RegistrationOpenEx(Library, &RegConfig, &QuicCtx->Registration))) {
+        printf("RegistrationOpen failed, 0x%x!\n", Status);
+        goto Error;
+    }
+
+Error:
+    return (int)Status;
+}
+
+void uninitQuic(QUIC_CONTEXT* QuicCtx)
+{
+    if (QuicCtx->MsQuic != nullptr) {
+		if (QuicCtx->Connection != nullptr) {
+			QuicCtx->MsQuic->ConnectionClose(QuicCtx->Connection);
+			QuicCtx->Connection = nullptr;
+		}
+		
+        if (QuicCtx->Listener != nullptr) {
+            QuicCtx->MsQuic->ListenerClose(QuicCtx->Listener);
+            QuicCtx->Listener = nullptr;
+		}
+
+        if (QuicCtx->Configuration != nullptr) {
+            QuicCtx->MsQuic->ConfigurationClose(QuicCtx->Configuration);
+            QuicCtx->Configuration = nullptr;
+        }
+
+        if (QuicCtx->Registration != nullptr ) {
+            //
+            // This will block until all outstanding child objects have been
+            // closed.
+            //
+            QuicCtx->MsQuic->RegistrationClose(QuicCtx->Registration);
+            QuicCtx->Registration = nullptr;
+        }
+
+        MsQuicCloseEx(QuicCtx->Library, QuicCtx->MsQuic);
+        QuicCtx->MsQuic = nullptr;
+
+        MsQuicLibraryClose(QuicCtx->Library);
+        QuicCtx->Library = nullptr;
     }
 }
 
@@ -1062,49 +1154,24 @@ main(
     _In_reads_(argc) _Null_terminated_ char* argv[]
     )
 {
-    QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
-
-    //
-    // Open a handle to the library and get the API function table.
-    //
-    if (QUIC_FAILED(Status = MsQuicOpen(&MsQuic))) {
-        printf("MsQuicOpen failed, 0x%x!\n", Status);
-        goto Error;
-    }
-
-    //
-    // Create a registration for the app's connections.
-    //
-    if (QUIC_FAILED(Status = MsQuic->RegistrationOpen(&RegConfig, &Registration))) {
-        printf("RegistrationOpen failed, 0x%x!\n", Status);
-        goto Error;
-    }
-
+    QUIC_CONTEXT context;
     if (GetValue(argc, argv, "help") || GetValue(argc, argv, "?")) {
         PrintUsage();
     } else if (GetValue(argc, argv, "client")) {
-        RunClient(argc, argv);
+        if (InitQuic(&context, FALSE) == 0) {
+            RunClient(&context, argc, argv);
+			getchar();
+        }
+        uninitQuic(&context);
     } else if (GetValue(argc, argv, "server")) {
-        RunServer(argc, argv);
+        if (InitQuic(&context, TRUE) == 0) {
+            RunServer(&context, TRUE, argc, argv);
+            start_external_server(&context, UdpPort);
+        }
+        uninitQuic(&context);
     } else {
         PrintUsage();
     }
 
-Error:
-
-    if (MsQuic != nullptr) {
-        if (Configuration != nullptr) {
-            MsQuic->ConfigurationClose(Configuration);
-        }
-        if (Registration != nullptr) {
-            //
-            // This will block until all outstanding child objects have been
-            // closed.
-            //
-            MsQuic->RegistrationClose(Registration);
-        }
-        MsQuicClose(MsQuic);
-    }
-
-    return (int)Status;
+    return 0;
 }
