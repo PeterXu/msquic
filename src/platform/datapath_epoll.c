@@ -457,7 +457,6 @@ CxPlatProcessorContextInitialize(
     _Out_ CXPLAT_DATAPATH_PROC_CONTEXT* ProcContext
     )
 {
-    BOOLEAN ExternalSocket = Datapath->ExternalSocket;
     QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
     int EpollFd = INVALID_SOCKET;
     int EventFd = INVALID_SOCKET;
@@ -491,9 +490,6 @@ CxPlatProcessorContextInitialize(
         sizeof(CXPLAT_SEND_DATA),
         QUIC_POOL_PLATFORM_SENDCTX,
         &ProcContext->SendDataPool);
-
-    // TODO: peter
-    if (!ExternalSocket) {
 
     EpollFd = epoll_create1(EPOLL_CLOEXEC);
     if (EpollFd == INVALID_SOCKET) {
@@ -536,7 +532,6 @@ CxPlatProcessorContextInitialize(
     }
 
     EventFdAdded = TRUE;
-    } // 
 
     ProcContext->Datapath = Datapath;
     ProcContext->EpollFd = EpollFd;
@@ -547,9 +542,6 @@ CxPlatProcessorContextInitialize(
     // members have been initialized. Because the thread start routine accesses
     // ProcContext members.
     //
-
-    // TODO: peter
-    if (!ExternalSocket) {
 
     CXPLAT_THREAD_CONFIG ThreadConfig = {
         CXPLAT_THREAD_FLAG_SET_AFFINITIZE,
@@ -568,8 +560,6 @@ CxPlatProcessorContextInitialize(
             "CxPlatThreadCreate failed");
         goto Exit;
     }
-
-    } //
 
 Exit:
 
@@ -954,12 +944,6 @@ CxPlatSocketContextInitialize(
         SocketContext->EventContexts[i] = i;
     }
 
-    if (ExternalSocket) {
-        SocketContext->CleanupFd = INVALID_SOCKET;
-        SocketContext->SocketFd = INVALID_SOCKET;
-        goto Exit;
-    }
-
     SocketContext->CleanupFd = eventfd(0, EFD_CLOEXEC);
     if (SocketContext->CleanupFd == INVALID_SOCKET) {
         Status = errno;
@@ -991,6 +975,11 @@ CxPlatSocketContextInitialize(
             Binding,
             Status,
             "epoll_ctl(EPOLL_CTL_ADD) failed");
+        goto Exit;
+    }
+
+    if (ExternalSocket) {
+        SocketContext->SocketFd = INVALID_SOCKET;
         goto Exit;
     }
 

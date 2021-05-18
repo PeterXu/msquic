@@ -43,6 +43,7 @@ extern "C" {
 #endif
 
 typedef struct QUIC_HANDLE *HQUIC;
+typedef struct QUIC_LIBRARY *HQUIC_LIBRARY;
 
 //
 // The maximum value that can be encoded in a 62-bit integer.
@@ -694,6 +695,17 @@ QUIC_STATUS
         HQUIC* Registration
     );
 
+typedef
+_IRQL_requires_max_(PASSIVE_LEVEL)
+QUIC_STATUS
+(QUIC_API * QUIC_REGISTRATION_OPEN_EX_FN)(
+    _In_ HQUIC_LIBRARY Library,
+    _In_opt_ const QUIC_REGISTRATION_CONFIG* Config,
+    _Outptr_ _At_(*Registration, __drv_allocatesMem(Mem)) _Pre_defensive_
+        HQUIC* Registration
+    );
+
+
 //
 // Closes the registration. This function synchronizes the cleanup of all
 // child objects. It does this by blocking until all those child objects have
@@ -1247,6 +1259,7 @@ typedef struct QUIC_API_TABLE {
     QUIC_GET_PARAM_FN                   GetParam;
 
     QUIC_REGISTRATION_OPEN_FN           RegistrationOpen;
+    QUIC_REGISTRATION_OPEN_EX_FN        RegistrationOpenEx;
     QUIC_REGISTRATION_CLOSE_FN          RegistrationClose;
     QUIC_REGISTRATION_SHUTDOWN_FN       RegistrationShutdown;
 
@@ -1310,7 +1323,19 @@ MsQuicClose(
 // Custom library
 //
 
-typedef struct QUIC_LIBRARY *HQUIC_LIBRARY;
+_IRQL_requires_max_(PASSIVE_LEVEL)
+HQUIC_LIBRARY
+QUIC_API
+MsQuicLibraryOpen(
+    _In_ BOOLEAN ExternalSocket
+    );
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+void
+QUIC_API
+MsQuicLibraryClose(
+    _In_ HQUIC_LIBRARY Library
+    );
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
 QUIC_STATUS

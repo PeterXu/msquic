@@ -210,7 +210,7 @@ QuicEtwCallback(
 #define QuicTraceLogErrorEnabled()   TRUE
 #define QuicTraceLogWarningEnabled() TRUE
 #define QuicTraceLogInfoEnabled()    TRUE
-#define QuicTraceLogVerboseEnabled() TRUE
+#define QuicTraceLogVerboseEnabled() FALSE
 
 inline
 void

@@ -1730,19 +1730,29 @@ QuicLibraryEvaluateSendRetryState(
 // My extend interfaces
 //
 
-_IRQL_requires_max_(DISPATCH_LEVEL)
-QUIC_LIBRARY*
-MsQuicLibraryOpen(BOOLEAN ExternalSocket)
+_IRQL_requires_max_(PASSIVE_LEVEL)
+HQUIC_LIBRARY
+QUIC_API
+MsQuicLibraryOpen(
+    _In_ BOOLEAN ExternalSocket
+    )
 {
-    QUIC_LIBRARY *Library = (QUIC_LIBRARY *)malloc(sizeof(QUIC_LIBRARY));
-    memset(Library, 0, sizeof(QUIC_LIBRARY));
+    QUIC_LIBRARY *Library = CXPLAT_ALLOC_NONPAGED(sizeof(QUIC_LIBRARY), QUIC_POOL_API);
+    if (Library == NULL) {
+        //Status = QUIC_STATUS_OUT_OF_MEMORY;
+        return NULL;
+    }
+    CxPlatZeroMemory(Library, sizeof(QUIC_LIBRARY));
     QuicLibraryPrivateInit(Library, ExternalSocket);
     return Library;
 }
 
-_IRQL_requires_max_(DISPATCH_LEVEL)
+_IRQL_requires_max_(PASSIVE_LEVEL)
 void
-MsQuicLibraryClose(QUIC_LIBRARY *Library)
+QUIC_API
+MsQuicLibraryClose(
+    _In_ HQUIC_LIBRARY Library
+    )
 {
     if (Library != NULL) {
         QuicLibraryPrivateUnInit(Library);
@@ -1791,6 +1801,7 @@ MsQuicOpenEx(
     Api->GetParam = MsQuicGetParam;
 
     Api->RegistrationOpen = MsQuicRegistrationOpen;
+    Api->RegistrationOpenEx = MsQuicRegistrationOpenEx;
     Api->RegistrationClose = MsQuicRegistrationClose;
     Api->RegistrationShutdown = MsQuicRegistrationShutdown;
 

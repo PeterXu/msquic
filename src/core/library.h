@@ -579,17 +579,3 @@ void
 QuicLibraryOnHandshakeConnectionRemoved(
     QUIC_LIBRARY *Library
     );
-
-
-
-//
-// Create self QuicLibrary instance
-//
-_IRQL_requires_max_(DISPATCH_LEVEL)
-QUIC_LIBRARY*
-MsQuicLibraryOpen(BOOLEAN ExternalSocket);
-
-_IRQL_requires_max_(DISPATCH_LEVEL)
-void
-MsQuicLibraryClose(QUIC_LIBRARY *);
-

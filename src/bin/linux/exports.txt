@@ -1,5 +1,6 @@
 msquic
 {
   global: MsQuicOpen; MsQuicClose;
+  MsQuicOpenEx; MsQuicCloseEx; MsQuicLibraryOpen; MsQuicLibraryClose;
   local: *;
 };
