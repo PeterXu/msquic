@@ -578,7 +578,6 @@ CXPLAT_THREAD_CALLBACK(QuicWorkerThread, Context)
 
         QUIC_CONNECTION* Connection = QuicWorkerGetNextConnection(Worker);
         if (Connection != NULL) {
-            Library = Connection->Library;
             QuicWorkerProcessConnection(Worker, Connection);
         }
 
