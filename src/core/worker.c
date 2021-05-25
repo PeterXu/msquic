@@ -553,8 +553,6 @@ QuicWorkerProcessConnection(
 CXPLAT_THREAD_CALLBACK(QuicWorkerThread, Context)
 {
     QUIC_WORKER* Worker = (QUIC_WORKER*)Context;
-    QUIC_LIBRARY* Library = (QUIC_LIBRARY *)Worker->Library;
-
     Worker->ThreadID = CxPlatCurThreadID();
     Worker->IsActive = TRUE;
     QuicTraceEvent(
@@ -587,7 +585,7 @@ CXPLAT_THREAD_CALLBACK(QuicWorkerThread, Context)
                 Operation->Type,
                 Operation->STATELESS.Context);
             QuicOperationFree(Worker, Operation);
-            QuicPerfCounterIncrement(Library, QUIC_PERF_COUNTER_WORK_OPER_COMPLETED);
+            QuicPerfCounterIncrement(Worker->Library, QUIC_PERF_COUNTER_WORK_OPER_COMPLETED);
         }
 
         uint64_t TimeNow = CxPlatTimeUs64();
@@ -596,7 +594,7 @@ CXPLAT_THREAD_CALLBACK(QuicWorkerThread, Context)
         // Opportunistically try to snap-shot performance counters and do
         // some validation.
         //
-        QuicPerfCounterTrySnapShot(Library, TimeNow);
+        QuicPerfCounterTrySnapShot(Worker->Library, TimeNow);
 
         //
         // Get the delay until the next timer expires. Check to see if any
@@ -676,7 +674,7 @@ CXPLAT_THREAD_CALLBACK(QuicWorkerThread, Context)
         QuicConnRelease(Connection, QUIC_CONN_REF_WORKER);
         --Dequeue;
     }
-    QuicPerfCounterAdd(Library, QUIC_PERF_COUNTER_CONN_QUEUE_DEPTH, Dequeue);
+    QuicPerfCounterAdd(Worker->Library, QUIC_PERF_COUNTER_CONN_QUEUE_DEPTH, Dequeue);
 
     Dequeue = 0;
     while (!CxPlatListIsEmpty(&Worker->Operations)) {
@@ -689,7 +687,7 @@ CXPLAT_THREAD_CALLBACK(QuicWorkerThread, Context)
         QuicOperationFree(Worker, Operation);
         --Dequeue;
     }
-    QuicPerfCounterAdd(Library, QUIC_PERF_COUNTER_WORK_OPER_QUEUE_DEPTH, Dequeue);
+    QuicPerfCounterAdd(Worker->Library, QUIC_PERF_COUNTER_WORK_OPER_QUEUE_DEPTH, Dequeue);
 
     QuicTraceEvent(
         WorkerStop,

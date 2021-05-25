@@ -365,9 +365,6 @@ QuicPerfCounterTrySnapShot(
     _In_ uint64_t TimeNow
     )
 {
-    if (Library == NULL) {
-        return;
-    }
     uint64_t TimeLast = Library->PerfCounterSamplesTime;
     uint64_t TimeDiff = CxPlatTimeDiff64(TimeLast, TimeNow);
     if (TimeDiff < S_TO_US(QUIC_PERF_SAMPLE_INTERVAL_S)) {
