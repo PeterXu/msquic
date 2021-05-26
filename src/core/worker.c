@@ -730,6 +730,7 @@ QuicWorkerPoolInitialize(
     //
 
     for (uint16_t i = 0; i < WorkerCount; i++) {
+        WorkerPool->Workers[i].Library = Library;
         Status = QuicWorkerInitialize(Owner, ThreadFlags, i, &WorkerPool->Workers[i]);
         if (QUIC_FAILED(Status)) {
             for (uint16_t j = 0; j < i; j++) {
@@ -737,7 +738,6 @@ QuicWorkerPoolInitialize(
             }
             goto Error;
         }
-        WorkerPool->Workers[i].Library = Library;
     }
 
     *NewWorkerPool = WorkerPool;
