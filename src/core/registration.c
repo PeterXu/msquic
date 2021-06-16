@@ -33,6 +33,20 @@ MsQuicRegistrationOpen(
         HQUIC* NewRegistration
     )
 {
+    extern QUIC_LIBRARY MsQuicLib;
+    return MsQuicRegistrationOpenEx(&MsQuicLib, Config, NewRegistration);
+}
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+QUIC_STATUS
+QUIC_API
+MsQuicRegistrationOpenEx(
+    _In_ QUIC_LIBRARY* Library,
+    _In_opt_ const QUIC_REGISTRATION_CONFIG* Config,
+    _Outptr_ _At_(*NewRegistration, __drv_allocatesMem(Mem)) _Pre_defensive_
+        HQUIC* NewRegistration
+    )
+{
     QUIC_STATUS Status;
     QUIC_REGISTRATION* Registration = NULL;
     size_t AppNameLength = 0;
@@ -65,6 +79,7 @@ MsQuicRegistrationOpen(
         goto Error;
     }
 
+    Registration->Library = Library;
     Registration->Type = QUIC_HANDLE_TYPE_REGISTRATION;
     Registration->ClientContext = NULL;
     Registration->NoPartitioning = FALSE;
@@ -113,15 +128,16 @@ MsQuicRegistrationOpen(
     // The shared one is always one greater than the RSS core.
     //
     if (Registration->SplitPartitioning &&
-        MsQuicLib.PartitionCount <= QUIC_MAX_THROUGHPUT_PARTITION_OFFSET) {
+        Library->PartitionCount <= QUIC_MAX_THROUGHPUT_PARTITION_OFFSET) {
         Registration->SplitPartitioning = FALSE; // Not enough partitions.
     }
 
     Status =
         QuicWorkerPoolInitialize(
+            Library,
             Registration,
             WorkerThreadFlags,
-            Registration->NoPartitioning ? 1 : MsQuicLib.PartitionCount,
+            Registration->NoPartitioning ? 1 : Library->PartitionCount,
             &Registration->WorkerPool);
     if (QUIC_FAILED(Status)) {
         goto Error;
@@ -135,7 +151,7 @@ MsQuicRegistrationOpen(
 
 #ifdef CxPlatVerifierEnabledByAddr
 #pragma prefast(suppress:6001, "SAL doesn't understand checking whether memory is tracked by Verifier.")
-    if (MsQuicLib.IsVerifying &&
+    if (Library->IsVerifying &&
         CxPlatVerifierEnabledByAddr(NewRegistration)) {
         Registration->IsVerifying = TRUE;
         QuicTraceLogInfo(
@@ -148,9 +164,9 @@ MsQuicRegistrationOpen(
 #endif
 
     if (Registration->ExecProfile != QUIC_EXECUTION_PROFILE_TYPE_INTERNAL) {
-        CxPlatLockAcquire(&MsQuicLib.Lock);
-        CxPlatListInsertTail(&MsQuicLib.Registrations, &Registration->Link);
-        CxPlatLockRelease(&MsQuicLib.Lock);
+        CxPlatLockAcquire(&Library->Lock);
+        CxPlatListInsertTail(&Library->Registrations, &Registration->Link);
+        CxPlatLockRelease(&Library->Lock);
     }
 
     *NewRegistration = (HQUIC)Registration;
@@ -190,6 +206,7 @@ MsQuicRegistrationClose(
 
 #pragma prefast(suppress: __WARNING_25024, "Pointer cast already validated.")
         QUIC_REGISTRATION* Registration = (QUIC_REGISTRATION*)Handle;
+        QUIC_LIBRARY* Library = Registration->Library;
 
         QuicTraceEvent(
             RegistrationCleanup,
@@ -197,9 +214,9 @@ MsQuicRegistrationClose(
             Registration);
 
         if (Registration->ExecProfile != QUIC_EXECUTION_PROFILE_TYPE_INTERNAL) {
-            CxPlatLockAcquire(&MsQuicLib.Lock);
+            CxPlatLockAcquire(&Library->Lock);
             CxPlatListEntryRemove(&Registration->Link);
-            CxPlatLockRelease(&MsQuicLib.Lock);
+            CxPlatLockRelease(&Library->Lock);
         }
 
         CxPlatRundownReleaseAndWait(&Registration->Rundown);
@@ -339,6 +356,7 @@ QuicRegistrationAcceptConnection(
     _In_ QUIC_CONNECTION* Connection
     )
 {
+    QUIC_LIBRARY* Library = Connection->Library;
     if (Registration->SplitPartitioning) {
         //
         // TODO - Constrain PartitionID to the same NUMA node?
@@ -347,7 +365,7 @@ QuicRegistrationAcceptConnection(
     }
 
     uint16_t Index =
-        Registration->NoPartitioning ? 0 : QuicPartitionIdGetIndex(Connection->PartitionID);
+        Registration->NoPartitioning ? 0 : QuicPartitionIdGetIndex(Library, Connection->PartitionID);
 
     //
     // TODO - Look for other worker instead if the proposed worker is overloaded?
@@ -363,8 +381,9 @@ QuicRegistrationQueueNewConnection(
     _In_ QUIC_CONNECTION* Connection
     )
 {
+    QUIC_LIBRARY *Library = Connection->Library;
     uint16_t Index =
-        Registration->NoPartitioning ? 0 : QuicPartitionIdGetIndex(Connection->PartitionID);
+        Registration->NoPartitioning ? 0 : QuicPartitionIdGetIndex(Library, Connection->PartitionID);
 
     //
     // TODO - Look for other worker instead if the proposed worker is overloaded?

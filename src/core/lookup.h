@@ -20,7 +20,9 @@ typedef struct QUIC_REMOTE_HASH_ENTRY {
 //
 // Lookup table for connections.
 //
+typedef struct QUIC_LIBRARY QUIC_LIBRARY;
 typedef struct QUIC_LOOKUP {
+    QUIC_LIBRARY *Library;
 
     //
     // Indicates that maximized partitioning is needed, likely because a

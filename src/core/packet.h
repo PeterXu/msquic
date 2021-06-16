@@ -543,6 +543,7 @@ QuicPacketEncodeShortHeaderV1(
 inline
 uint32_t
 QuicPacketHash(
+    _In_ QUIC_LIBRARY* Library,
     _In_ const QUIC_ADDR* const RemoteAddress,
     _In_ uint8_t RemoteCidLength,
     _In_reads_(RemoteCidLength)
@@ -551,14 +552,14 @@ QuicPacketHash(
 {
     uint32_t Key = 0, Offset;
     CxPlatToeplitzHashComputeAddr(
-        &MsQuicLib.ToeplitzHash,
+        &Library->ToeplitzHash,
         RemoteAddress,
         &Key,
         &Offset);
     if (RemoteCidLength != 0) {
         Key ^=
             CxPlatToeplitzHashCompute(
-                &MsQuicLib.ToeplitzHash,
+                &Library->ToeplitzHash,
                 RemoteCid,
                 CXPLAT_MIN(RemoteCidLength, QUIC_MAX_CONNECTION_ID_LENGTH_V1),
                 Offset);

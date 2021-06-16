@@ -1356,7 +1356,7 @@ MsQuicSetParam(
         //
         // Global parameters are processed inline.
         //
-        Status = QuicLibrarySetGlobalParam(Param, BufferLength, Buffer);
+        Status = QuicLibrarySetGlobalParam(Handle->Library, Param, BufferLength, Buffer);
         goto Error;
     }
 
@@ -1493,7 +1493,7 @@ MsQuicGetParam(
         //
         // Global parameters are processed inline.
         //
-        Status = QuicLibraryGetGlobalParam(Param, BufferLength, Buffer);
+        Status = QuicLibraryGetGlobalParam(Handle->Library, Param, BufferLength, Buffer);
         goto Error;
     }
 

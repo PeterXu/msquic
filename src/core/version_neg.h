@@ -28,6 +28,7 @@ typedef struct QUIC_VERSION_INFORMATION_V1 {
 
 BOOLEAN
 QuicVersionNegotiationExtIsVersionServerSupported(
+    _In_ QUIC_LIBRARY* Library,
     _In_ uint32_t Version
     );
 

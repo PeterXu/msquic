@@ -888,11 +888,12 @@ QuicStreamReceiveComplete(
     _In_ uint64_t BufferLength
     )
 {
+    QUIC_LIBRARY* Library = Stream->Library;
     if (!Stream->Flags.ReceiveCallPending) {
         return FALSE;
     }
 
-    QuicPerfCounterAdd(QUIC_PERF_COUNTER_APP_RECV_BYTES, BufferLength);
+    QuicPerfCounterAdd(Library, QUIC_PERF_COUNTER_APP_RECV_BYTES, BufferLength);
 
     CXPLAT_FRE_ASSERTMSG(
         BufferLength <= Stream->RecvPendingLength,

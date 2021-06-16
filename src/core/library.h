@@ -26,6 +26,7 @@ typedef enum QUIC_HANDLE_TYPE {
 //
 // The base type for all QUIC handles.
 //
+typedef struct QUIC_LIBRARY QUIC_LIBRARY;
 typedef struct QUIC_HANDLE {
 
     //
@@ -38,6 +39,7 @@ typedef struct QUIC_HANDLE {
     //
     void* ClientContext;
 
+    QUIC_LIBRARY* Library;
 } QUIC_HANDLE;
 
 //
@@ -116,6 +118,8 @@ typedef struct QUIC_LIBRARY {
     // Configurable (app & registry) settings.
     //
     QUIC_SETTINGS Settings;
+
+    BOOLEAN ExternalSocket;
 
     //
     // Controls access to all non-datapath internal state of the library.
@@ -264,34 +268,34 @@ typedef struct QUIC_LIBRARY {
 
 } QUIC_LIBRARY;
 
-extern QUIC_LIBRARY MsQuicLib;
+//extern QUIC_LIBRARY MsQuicLib;
 
 #ifdef CxPlatVerifierEnabled
-#define QUIC_LIB_VERIFY(Expr) \
-    if (MsQuicLib.IsVerifying) { CXPLAT_FRE_ASSERT(Expr); }
+#define QUIC_LIB_VERIFY(Library, Expr) \
+    if (Library->IsVerifying) { CXPLAT_FRE_ASSERT(Expr); }
 #else
-#define QUIC_LIB_VERIFY(Expr)
+#define QUIC_LIB_VERIFY(Library, Expr)
 #endif
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-_Ret_range_(0,MsQuicLib.PartitionCount - 1)
 inline
 uint16_t
 QuicLibraryGetCurrentPartition(
-    void
+    QUIC_LIBRARY* Library
     )
 {
-    return ((uint16_t)CxPlatProcCurrentNumber()) % MsQuicLib.PartitionCount;
+    return ((uint16_t)CxPlatProcCurrentNumber()) % Library->PartitionCount;
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 inline
 uint16_t
 QuicPartitionIdCreate(
+    QUIC_LIBRARY* Library,
     uint16_t BaseIndex
     )
 {
-    CXPLAT_DBG_ASSERT(BaseIndex < MsQuicLib.PartitionCount);
+    CXPLAT_DBG_ASSERT(BaseIndex < Library->PartitionCount);
     //
     // Generate a partition ID which is a combination of random high bits and
     // the actual partitioning index encoded in the low bits.
@@ -302,44 +306,47 @@ QuicPartitionIdCreate(
     //
     uint16_t PartitionId;
     CxPlatRandom(sizeof(PartitionId), &PartitionId);
-    return (PartitionId & ~MsQuicLib.PartitionMask) | BaseIndex;
+    return (PartitionId & ~Library->PartitionMask) | BaseIndex;
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 inline
 uint16_t
 QuicPartitionIdGetIndex(
+    QUIC_LIBRARY* Library,
     uint16_t PartitionId
     )
 {
-    return (PartitionId & MsQuicLib.PartitionMask) % MsQuicLib.PartitionCount;
+    return (PartitionId & Library->PartitionMask) % Library->PartitionCount;
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 inline
 uint16_t
 QuicPartitionIndexIncrement(
+    QUIC_LIBRARY* Library,
     uint16_t PartitionIndex,
     uint16_t Increment
     )
 {
-    CXPLAT_DBG_ASSERT(Increment < MsQuicLib.PartitionCount);
-    return (PartitionIndex + Increment) % MsQuicLib.PartitionCount;
+    CXPLAT_DBG_ASSERT(Increment < Library->PartitionCount);
+    return (PartitionIndex + Increment) % Library->PartitionCount;
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 inline
 uint16_t
 QuicPartitionIndexDecrement(
+    QUIC_LIBRARY* Library,
     uint16_t PartitionIndex,
     uint16_t Decrement
     )
 {
-    CXPLAT_DBG_ASSERT(Decrement < MsQuicLib.PartitionCount);
+    CXPLAT_DBG_ASSERT(Decrement < Library->PartitionCount);
     if (PartitionIndex >= Decrement) {
         return PartitionIndex - Decrement;
     } else {
-        return PartitionIndex + (MsQuicLib.PartitionCount - Decrement);
+        return PartitionIndex + (Library->PartitionCount - Decrement);
     }
 }
 
@@ -347,24 +354,26 @@ _IRQL_requires_max_(DISPATCH_LEVEL)
 inline
 void
 QuicPerfCounterAdd(
+    _In_ QUIC_LIBRARY* Library,
     _In_ QUIC_PERFORMANCE_COUNTERS Type,
     _In_ int64_t Value
     )
 {
     CXPLAT_DBG_ASSERT(Type >= 0 && Type < QUIC_PERF_COUNTER_MAX);
     uint32_t ProcIndex = CxPlatProcCurrentNumber();
-    CXPLAT_DBG_ASSERT(ProcIndex < (uint32_t)MsQuicLib.PartitionCount);
-    InterlockedExchangeAdd64(&(MsQuicLib.PerProc[ProcIndex].PerfCounters[Type]), Value);
+    CXPLAT_DBG_ASSERT(ProcIndex < (uint32_t)Library->PartitionCount);
+    InterlockedExchangeAdd64(&(Library->PerProc[ProcIndex].PerfCounters[Type]), Value);
 }
 
-#define QuicPerfCounterIncrement(Type) QuicPerfCounterAdd(Type, 1)
-#define QuicPerfCounterDecrement(Type) QuicPerfCounterAdd(Type, -1)
+#define QuicPerfCounterIncrement(Library, Type) QuicPerfCounterAdd(Library, Type, 1)
+#define QuicPerfCounterDecrement(Library, Type) QuicPerfCounterAdd(Library, Type, -1)
 
 #define QUIC_PERF_SAMPLE_INTERVAL_S    30 // 30 seconds
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 void
 QuicPerfCounterSnapShot(
+    _In_ QUIC_LIBRARY *Library,
     _In_ uint64_t TimeDiffUs
     );
 
@@ -372,10 +381,11 @@ _IRQL_requires_max_(DISPATCH_LEVEL)
 inline
 void
 QuicPerfCounterTrySnapShot(
+    _In_ QUIC_LIBRARY *Library,
     _In_ uint64_t TimeNow
     )
 {
-    uint64_t TimeLast = MsQuicLib.PerfCounterSamplesTime;
+    uint64_t TimeLast = Library->PerfCounterSamplesTime;
     uint64_t TimeDiff = CxPlatTimeDiff64(TimeLast, TimeNow);
     if (TimeDiff < S_TO_US(QUIC_PERF_SAMPLE_INTERVAL_S)) {
         return; // Not time to resample yet.
@@ -383,13 +393,13 @@ QuicPerfCounterTrySnapShot(
 
     if ((int64_t)TimeLast !=
         InterlockedCompareExchange64(
-            (int64_t*)&MsQuicLib.PerfCounterSamplesTime,
+            (int64_t*)&Library->PerfCounterSamplesTime,
             (int64_t)TimeNow,
             (int64_t)TimeLast)) {
         return; // Someone else already is updating.
     }
 
-    QuicPerfCounterSnapShot(TimeDiff);
+    QuicPerfCounterSnapShot(Library, TimeDiff);
 }
 
 //
@@ -400,38 +410,38 @@ inline
 _Success_(return != NULL)
 QUIC_CID_HASH_ENTRY*
 QuicCidNewRandomSource(
+    _In_ QUIC_LIBRARY *Library,
     _In_opt_ QUIC_CONNECTION* Connection,
-    _In_reads_opt_(MsQuicLib.CidServerIdLength)
-        const void* ServerID,
+    _In_ const void* ServerID,
     _In_ uint16_t PartitionID,
     _In_ uint8_t PrefixLength,
     _In_reads_(PrefixLength)
         const void* Prefix
     )
 {
-    CXPLAT_DBG_ASSERT(MsQuicLib.CidTotalLength <= QUIC_MAX_CONNECTION_ID_LENGTH_V1);
-    CXPLAT_DBG_ASSERT(MsQuicLib.CidTotalLength == MsQuicLib.CidServerIdLength + MSQUIC_CID_PID_LENGTH + MSQUIC_CID_PAYLOAD_LENGTH);
+    CXPLAT_DBG_ASSERT(Library->CidTotalLength <= QUIC_MAX_CONNECTION_ID_LENGTH_V1);
+    CXPLAT_DBG_ASSERT(Library->CidTotalLength == Library->CidServerIdLength + MSQUIC_CID_PID_LENGTH + MSQUIC_CID_PAYLOAD_LENGTH);
     CXPLAT_DBG_ASSERT(MSQUIC_CID_PAYLOAD_LENGTH > PrefixLength);
 
     QUIC_CID_HASH_ENTRY* Entry =
         (QUIC_CID_HASH_ENTRY*)
         CXPLAT_ALLOC_NONPAGED(
             sizeof(QUIC_CID_HASH_ENTRY) +
-            MsQuicLib.CidTotalLength,
+            Library->CidTotalLength,
             QUIC_POOL_CIDHASH);
 
     if (Entry != NULL) {
         Entry->Connection = Connection;
         CxPlatZeroMemory(&Entry->CID, sizeof(Entry->CID));
-        Entry->CID.Length = MsQuicLib.CidTotalLength;
+        Entry->CID.Length = Library->CidTotalLength;
 
         uint8_t* Data = Entry->CID.Data;
         if (ServerID != NULL) {
-            CxPlatCopyMemory(Data, ServerID, MsQuicLib.CidServerIdLength);
+            CxPlatCopyMemory(Data, ServerID, Library->CidServerIdLength);
         } else {
-            CxPlatRandom(MsQuicLib.CidServerIdLength, Data);
+            CxPlatRandom(Library->CidServerIdLength, Data);
         }
-        Data += MsQuicLib.CidServerIdLength;
+        Data += Library->CidServerIdLength;
 
         CXPLAT_STATIC_ASSERT(MSQUIC_CID_PID_LENGTH == sizeof(PartitionID), "Assumes a 2 byte PID");
         CxPlatCopyMemory(Data, &PartitionID, sizeof(PartitionID));
@@ -451,6 +461,7 @@ QuicCidNewRandomSource(
 _IRQL_requires_max_(PASSIVE_LEVEL)
 QUIC_STATUS
 QuicLibrarySetGlobalParam(
+    _In_ QUIC_LIBRARY *Library,
     _In_ uint32_t Param,
     _In_ uint32_t BufferLength,
     _In_reads_bytes_(BufferLength)
@@ -460,6 +471,7 @@ QuicLibrarySetGlobalParam(
 _IRQL_requires_max_(PASSIVE_LEVEL)
 QUIC_STATUS
 QuicLibraryGetGlobalParam(
+    _In_ QUIC_LIBRARY *Library,
     _In_ uint32_t Param,
     _Inout_ uint32_t* BufferLength,
     _Out_writes_bytes_opt_(*BufferLength)
@@ -494,6 +506,7 @@ QuicLibraryGetParam(
 _IRQL_requires_max_(PASSIVE_LEVEL)
 QUIC_STATUS
 QuicLibraryGetBinding(
+    _In_ QUIC_LIBRARY *Library,
     _In_ const CXPLAT_UDP_CONFIG* UdpConfig,
     _Out_ QUIC_BINDING** NewBinding
     );
@@ -505,6 +518,7 @@ QuicLibraryGetBinding(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 BOOLEAN
 QuicLibraryTryAddRefBinding(
+    _In_ QUIC_LIBRARY *Library,
     _In_ QUIC_BINDING* Binding
     );
 
@@ -516,6 +530,7 @@ QuicLibraryTryAddRefBinding(
 _IRQL_requires_max_(PASSIVE_LEVEL)
 void
 QuicLibraryReleaseBinding(
+    _In_ QUIC_LIBRARY *Library,
     _In_ QUIC_BINDING* Binding
     );
 
@@ -526,6 +541,7 @@ QuicLibraryReleaseBinding(
 _IRQL_requires_max_(PASSIVE_LEVEL)
 BOOLEAN
 QuicLibraryOnListenerRegistered(
+    _In_ QUIC_LIBRARY *Library,
     _In_ QUIC_LISTENER* Listener
     );
 
@@ -535,6 +551,7 @@ QuicLibraryOnListenerRegistered(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 QUIC_WORKER*
 QuicLibraryGetWorker(
+    _In_ QUIC_LIBRARY *Library,
     _In_ const _In_ CXPLAT_RECV_DATA* Datagram
     );
 
@@ -545,7 +562,7 @@ _IRQL_requires_max_(DISPATCH_LEVEL)
 _Ret_maybenull_
 CXPLAT_KEY*
 QuicLibraryGetCurrentStatelessRetryKey(
-    void
+    _In_ QUIC_LIBRARY *Library
     );
 
 //
@@ -555,6 +572,7 @@ _IRQL_requires_max_(DISPATCH_LEVEL)
 _Ret_maybenull_
 CXPLAT_KEY*
 QuicLibraryGetStatelessRetryKeyForTimestamp(
+    _In_ QUIC_LIBRARY *Library,
     _In_ int64_t Timestamp
     );
 
@@ -564,7 +582,7 @@ QuicLibraryGetStatelessRetryKeyForTimestamp(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 void
 QuicLibraryOnHandshakeConnectionAdded(
-    void
+    _In_ QUIC_LIBRARY *Library
     );
 
 //
@@ -573,7 +591,7 @@ QuicLibraryOnHandshakeConnectionAdded(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 void
 QuicLibraryOnHandshakeConnectionRemoved(
-    void
+    _In_ QUIC_LIBRARY *Library
     );
 
 //
@@ -582,8 +600,8 @@ QuicLibraryOnHandshakeConnectionRemoved(
 _IRQL_requires_max_(PASSIVE_LEVEL)
 QUIC_STATUS
 QuicLibraryGenerateStatelessResetToken(
-    _In_reads_(MsQuicLib.CidTotalLength)
-        const uint8_t* const CID,
+    _In_ QUIC_LIBRARY *Library,
+    _In_ const uint8_t* const CID,
     _Out_writes_all_(QUIC_STATELESS_RESET_TOKEN_LENGTH)
         uint8_t* ResetToken
     );

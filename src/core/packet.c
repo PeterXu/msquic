@@ -80,6 +80,13 @@ QuicPacketValidateInvariant(
     uint8_t DestCidLen, SourceCidLen;
     const uint8_t* DestCid, *SourceCid;
 
+    QUIC_LIBRARY *Library = NULL;
+    if (Packet->AssignedToConnection) {
+        Library = ((QUIC_CONNECTION*)Owner)->Library;
+    } else {
+        Library = ((QUIC_BINDING*)Owner)->Library;
+    }
+
     //
     // Ignore empty or too short packets.
     //
@@ -112,7 +119,7 @@ QuicPacketValidateInvariant(
     } else {
 
         Packet->IsShortHeader = TRUE;
-        DestCidLen = IsBindingShared ? MsQuicLib.CidTotalLength : 0;
+        DestCidLen = IsBindingShared ? Library->CidTotalLength : 0;
         SourceCidLen = 0;
 
         //
@@ -705,7 +712,9 @@ QuicPacketLogDrop(
     const CXPLAT_RECV_DATA* Datagram = // cppcheck-suppress unreadVariable; NOLINT
         CxPlatDataPathRecvPacketToRecvData(Packet);
 
+    QUIC_LIBRARY *Library = NULL;
     if (Packet->AssignedToConnection) {
+        Library = ((QUIC_CONNECTION*)Owner)->Library;
         InterlockedIncrement64((int64_t*)&((QUIC_CONNECTION*)Owner)->Stats.Recv.DroppedPackets);
         QuicTraceEvent(
             ConnDropPacket,
@@ -715,6 +724,7 @@ QuicPacketLogDrop(
             CASTED_CLOG_BYTEARRAY(sizeof(Datagram->Tuple->RemoteAddress), &Datagram->Tuple->RemoteAddress),
             Reason);
     } else {
+        Library = ((QUIC_BINDING*)Owner)->Library;
         InterlockedIncrement64((int64_t*)&((QUIC_BINDING*)Owner)->Stats.Recv.DroppedPackets);
         QuicTraceEvent(
             BindingDropPacket,
@@ -724,7 +734,7 @@ QuicPacketLogDrop(
             CASTED_CLOG_BYTEARRAY(sizeof(Datagram->Tuple->RemoteAddress), &Datagram->Tuple->RemoteAddress),
             Reason);
     }
-    QuicPerfCounterIncrement(QUIC_PERF_COUNTER_PKTS_DROPPED);
+    QuicPerfCounterIncrement(Library, QUIC_PERF_COUNTER_PKTS_DROPPED);
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
@@ -739,7 +749,9 @@ QuicPacketLogDropWithValue(
     const CXPLAT_RECV_DATA* Datagram = // cppcheck-suppress unreadVariable; NOLINT
         CxPlatDataPathRecvPacketToRecvData(Packet);
 
+    QUIC_LIBRARY *Library = NULL;
     if (Packet->AssignedToConnection) {
+        Library = ((QUIC_CONNECTION*)Owner)->Library;
         InterlockedIncrement64((int64_t*)&((QUIC_CONNECTION*)Owner)->Stats.Recv.DroppedPackets);
         QuicTraceEvent(
             ConnDropPacketEx,
@@ -750,6 +762,7 @@ QuicPacketLogDropWithValue(
             CASTED_CLOG_BYTEARRAY(sizeof(Datagram->Tuple->RemoteAddress), &Datagram->Tuple->RemoteAddress),
             Reason);
     } else {
+        Library = ((QUIC_BINDING*)Owner)->Library;
         InterlockedIncrement64((int64_t*)&((QUIC_BINDING*)Owner)->Stats.Recv.DroppedPackets);
         QuicTraceEvent(
             BindingDropPacketEx,
@@ -760,5 +773,5 @@ QuicPacketLogDropWithValue(
             CASTED_CLOG_BYTEARRAY(sizeof(Datagram->Tuple->RemoteAddress), &Datagram->Tuple->RemoteAddress),
             Reason);
     }
-    QuicPerfCounterIncrement(QUIC_PERF_COUNTER_PKTS_DROPPED);
+    QuicPerfCounterIncrement(Library, QUIC_PERF_COUNTER_PKTS_DROPPED);
 }

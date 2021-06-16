@@ -14,6 +14,8 @@ Abstract:
 #include "PartitionTest.cpp.clog.h"
 #endif
 
+extern QUIC_LIBRARY MsQuicLib;
+
 extern "C"
 void
 MsQuicCalculatePartitionMask(
@@ -45,7 +47,9 @@ TEST(PartitionTest, SplitPartitioning)
             ASSERT_EQ(
                 PartitionIndex,
                 QuicPartitionIndexDecrement(
+                    &MsQuicLib,
                     QuicPartitionIndexIncrement(
+                        &MsQuicLib,
                         PartitionIndex,
                         Inc),
                     Inc));
@@ -71,8 +75,8 @@ TEST(PartitionTest, RandomPartitionId)
             uint16_t PartitionIndex = (uint16_t)j;
 
             for (uint32_t k = 0; k < 50; ++k) {
-                uint16_t PartitionId = QuicPartitionIdCreate(PartitionIndex);
-                ASSERT_EQ(PartitionIndex, QuicPartitionIdGetIndex(PartitionId));
+                uint16_t PartitionId = QuicPartitionIdCreate(&MsQuicLib, PartitionIndex);
+                ASSERT_EQ(PartitionIndex, QuicPartitionIdGetIndex(&MsQuicLib, PartitionId));
             }
         }
     }

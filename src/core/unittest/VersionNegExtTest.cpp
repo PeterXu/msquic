@@ -15,6 +15,8 @@ Abstract:
 #include "VersionNegExtTest.cpp.clog.h"
 #endif
 
+extern QUIC_LIBRARY MsQuicLib;
+
 TEST(VersionNegExtTest, ParseVersionInfoFail)
 {
     const uint8_t ValidVI[] = {

@@ -496,6 +496,8 @@ QuicSendWriteFrames(
     BOOLEAN Is1RttEncryptionLevel =
         Builder->Metadata->Flags.KeyType == QUIC_PACKET_KEY_1_RTT ||
         Builder->Metadata->Flags.KeyType == QUIC_PACKET_KEY_0_RTT;
+    
+    QUIC_LIBRARY* Library = Connection->Library;
 
     //
     // Now fill the packet with available frames, in priority order, until we
@@ -715,6 +717,7 @@ QuicSendWriteFrames(
 
             BOOLEAN HasMoreCidsToSend = FALSE;
             BOOLEAN MaxFrameLimitHit = FALSE;
+            (void)Library;
             for (CXPLAT_SLIST_ENTRY* Entry = Connection->SourceCids.Next;
                     Entry != NULL;
                     Entry = Entry->Next) {
@@ -744,8 +747,9 @@ QuicSendWriteFrames(
                     Frame.Buffer,
                     SourceCid->CID.Data,
                     SourceCid->CID.Length);
-                CXPLAT_DBG_ASSERT(SourceCid->CID.Length == MsQuicLib.CidTotalLength);
+                CXPLAT_DBG_ASSERT(SourceCid->CID.Length == Library->CidTotalLength);
                 QuicLibraryGenerateStatelessResetToken(
+                    Library,
                     SourceCid->CID.Data,
                     Frame.Buffer + SourceCid->CID.Length);
 
@@ -835,7 +839,7 @@ QuicSendWriteFrames(
             Frame.UpdateMaxAckDelay =
                 MS_TO_US(
                     (uint64_t)Connection->Settings.MaxAckDelayMs +
-                    (uint64_t)MsQuicLib.TimerResolutionMs);
+                    (uint64_t)Library->TimerResolutionMs);
             Frame.IgnoreOrder = FALSE;
 
             if (QuicAckFrequencyFrameEncode(
