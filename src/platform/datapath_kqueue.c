@@ -313,6 +313,7 @@ typedef struct CXPLAT_DATAPATH_PROC_CONTEXT {
 //
 
 typedef struct CXPLAT_DATAPATH {
+    BOOLEAN ExternalSocket;
 
     //
     // A reference rundown on the datapath binding.
@@ -377,6 +378,7 @@ CxPlatProcessorContextUninitialize(
     _In_ CXPLAT_DATAPATH_PROC_CONTEXT* ProcContext
     )
 {
+    if (ProcContext->KqueueFd != INVALID_SOCKET) {
     struct kevent Event = {0};
     EV_SET(&Event, ProcContext->KqueueFd, EVFILT_USER, EV_ADD | EV_CLEAR, NOTE_TRIGGER, 0, NULL);
     kevent(ProcContext->KqueueFd, &Event, 1, NULL, 0, NULL);
@@ -384,6 +386,7 @@ CxPlatProcessorContextUninitialize(
     CxPlatThreadDelete(&ProcContext->KqueueWaitThread);
 
     close(ProcContext->KqueueFd);
+    }
 
     CxPlatPoolUninitialize(&ProcContext->RecvBlockPool);
     CxPlatPoolUninitialize(&ProcContext->LargeSendBufferPool);
@@ -488,7 +491,8 @@ Exit:
 }
 
 QUIC_STATUS
-CxPlatDataPathInitialize(
+CxPlatDataPathInitializeEx(
+    _In_ BOOLEAN ExternalSocket,
     _In_ uint32_t ClientRecvContextLength,
     _In_opt_ const CXPLAT_UDP_DATAPATH_CALLBACKS* UdpCallbacks,
     _In_opt_ const CXPLAT_TCP_DATAPATH_CALLBACKS* TcpCallbacks,
@@ -530,6 +534,7 @@ CxPlatDataPathInitialize(
     Datapath->ProcCount = 1; //CxPlatProcMaxCount(); // Darwin only supports a single receiver
     Datapath->MaxSendBatchSize = CXPLAT_MAX_BATCH_SEND;
     CxPlatRundownInitialize(&Datapath->BindingsRundown);
+    Datapath->ExternalSocket = ExternalSocket;
 
     //
     // Initialize the per processor contexts.
@@ -766,6 +771,7 @@ Exit:
 
 QUIC_STATUS
 CxPlatSocketContextInitialize(
+    _In_ BOOLEAN ExternalSocket,
     _Inout_ CXPLAT_SOCKET_CONTEXT* SocketContext,
     _In_ const QUIC_ADDR* LocalAddress,
     _In_ const QUIC_ADDR* RemoteAddress
@@ -780,6 +786,11 @@ CxPlatSocketContextInitialize(
     socklen_t AssignedLocalAddressLength = 0;
 
     CXPLAT_SOCKET* Binding = SocketContext->Binding;
+
+    if (ExternalSocket) {
+        SocketContext->SocketFd = INVALID_SOCKET;
+        goto Exit;
+    }
 
     //
     // Create datagram socket. We will use dual-mode sockets everywhere when we can.
@@ -1061,6 +1072,8 @@ CxPlatSocketContextUninitialize(
     _In_ CXPLAT_SOCKET_CONTEXT* SocketContext
     )
 {
+    if (SocketContext->ProcContext->KqueueFd != INVALID_SOCKET &&
+        SocketContext->SocketFd != INVALID_SOCKET) {
     struct kevent DeleteEvent = {0};
     EV_SET(&DeleteEvent, SocketContext->SocketFd, EVFILT_READ, EV_DELETE, 0, 0, (void*)SocketContext);
     kevent(SocketContext->ProcContext->KqueueFd, &DeleteEvent, 1, NULL, 0, NULL);
@@ -1068,6 +1081,7 @@ CxPlatSocketContextUninitialize(
     struct kevent Event = {0};
     EV_SET(&Event, SocketContext->SocketFd, EVFILT_USER, EV_ADD | EV_CLEAR, NOTE_TRIGGER, 0, (void*)SocketContext);
     kevent(SocketContext->ProcContext->KqueueFd, &Event, 1, NULL, 0, NULL);
+    }
 }
 
 void
@@ -1087,7 +1101,9 @@ CxPlatSocketContextUninitializeComplete(
                 PendingSendLinkage));
     }
 
+    if (SocketContext->SocketFd != INVALID_SOCKET) {
     close(SocketContext->SocketFd);
+    }
 
     CxPlatRundownRelease(&SocketContext->Binding->Rundown);
 }
@@ -1126,6 +1142,62 @@ CxPlatSocketContextPrepareReceive(
     SocketContext->RecvMsgHdr.msg_flags = 0;
 
     return QUIC_STATUS_SUCCESS;
+}
+
+QUIC_STATUS
+CxPlatSocketDeliverReceivePacket(
+    _In_ CXPLAT_SOCKET* BindingSocket,
+    _In_ const char *Buffer,
+    _In_ uint32_t Length
+    )
+{
+    QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
+    CXPLAT_SOCKET_CONTEXT* SocketContext = &BindingSocket->SocketContexts[0];
+
+    Status = CxPlatSocketContextPrepareReceive(SocketContext);
+    if (Status != QUIC_STATUS_SUCCESS) {
+        return Status;
+    }
+
+    CXPLAT_RECV_DATA* RecvPacket = &SocketContext->CurrentRecvBlock->RecvPacket;
+    SocketContext->CurrentRecvBlock = NULL;
+
+    QUIC_ADDR* LocalAddr = &RecvPacket->Tuple->LocalAddress;
+    if (LocalAddr->Ipv6.sin6_family == AF_INET6) {
+        LocalAddr->Ipv6.sin6_family = QUIC_ADDRESS_FAMILY_INET6;
+    }
+    QUIC_ADDR* RemoteAddr = &RecvPacket->Tuple->RemoteAddress;
+    if (RemoteAddr->Ipv6.sin6_family == AF_INET6) {
+        RemoteAddr->Ipv6.sin6_family = QUIC_ADDRESS_FAMILY_INET6;
+        CxPlatConvertFromMappedV6(RemoteAddr, RemoteAddr);
+    }
+
+    RecvPacket->TypeOfService = 0;
+
+    uint32_t BytesTransferred = Length;
+    QuicTraceEvent(
+        DatapathRecv,
+        "[data][%p] Recv %u bytes (segment=%hu) Src=%!ADDR! Dst=%!ADDR!",
+        SocketContext->Binding,
+        (uint32_t)BytesTransferred,
+        (uint32_t)BytesTransferred,
+        CLOG_BYTEARRAY(sizeof(*LocalAddr), LocalAddr),
+        CLOG_BYTEARRAY(sizeof(*RemoteAddr), RemoteAddr));
+
+    CXPLAT_DBG_ASSERT(BytesTransferred <= RecvPacket->BufferLength);
+    RecvPacket->BufferLength = BytesTransferred;
+    memcpy(RecvPacket->Buffer, Buffer, Length);
+    RecvPacket->PartitionIndex = SocketContext->ProcContext->Index;
+
+    {
+        CXPLAT_DBG_ASSERT(SocketContext->Binding->Datapath->UdpHandlers.Receive);
+        SocketContext->Binding->Datapath->UdpHandlers.Receive(
+            SocketContext->Binding,
+            SocketContext->Binding->ClientContext,
+            RecvPacket);
+    }
+
+    return Status;
 }
 
 QUIC_STATUS
@@ -1432,7 +1504,8 @@ CxPlatSocketContextProcessEvents(
 //
 
 QUIC_STATUS
-CxPlatSocketCreateUdp(
+CxPlatSocketCreateUdpEx(
+    _In_ BOOLEAN ExternalSocket,
     _In_ CXPLAT_DATAPATH* Datapath,
     _In_ const CXPLAT_UDP_CONFIG* Config,
     _Out_ CXPLAT_SOCKET** NewBinding
@@ -1441,6 +1514,7 @@ CxPlatSocketCreateUdp(
     QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
     BOOLEAN IsServerSocket = Config->RemoteAddress == NULL;
     int32_t SuccessfulStartReceives = -1;
+    ExternalSocket = (ExternalSocket || Datapath->ExternalSocket);
 
     CXPLAT_DBG_ASSERT(Datapath->UdpHandlers.Receive != NULL || Config->Flags & CXPLAT_SOCKET_FLAG_PCP);
 
@@ -1462,6 +1536,9 @@ CxPlatSocketCreateUdp(
             BindingLength);
         goto Exit;
     }
+
+    //Update
+    Datapath->ExternalSocket = ExternalSocket;
 
     QuicTraceEvent(
         DatapathCreated,
@@ -1500,6 +1577,7 @@ CxPlatSocketCreateUdp(
     for (uint32_t i = 0; i < SocketCount; i++) {
         Status =
             CxPlatSocketContextInitialize(
+                ExternalSocket,
                 &Binding->SocketContexts[i],
                 Config->LocalAddress,
                 Config->RemoteAddress);
@@ -1524,6 +1602,7 @@ CxPlatSocketCreateUdp(
     *NewBinding = Binding;
 
     SuccessfulStartReceives = 0;
+    if (!ExternalSocket) {
     for (uint32_t i = 0; i < SocketCount; i++) {
         Status =
             CxPlatSocketContextStartReceive(
@@ -1532,6 +1611,7 @@ CxPlatSocketCreateUdp(
             SuccessfulStartReceives = (int32_t)i;
             goto Exit;
         }
+    }
     }
 
     Status = QUIC_STATUS_SUCCESS;
@@ -2061,6 +2141,21 @@ CxPlatSocketSendInternal(
     CXPLAT_STATIC_ASSERT(
         sizeof(struct in6_pktinfo) >= sizeof(struct in_pktinfo),
         "sizeof(struct in6_pktinfo) >= sizeof(struct in_pktinfo) failed");
+
+    if (Socket->Datapath->ExternalSocket) {
+        if (Socket->Datapath->UdpHandlers.ExternalOutput != NULL) {
+            BOOLEAN Processed = Socket->Datapath->UdpHandlers.ExternalOutput(
+                    Socket,
+                    Socket->ClientContext,
+                    &SendData->Buffers[0],
+                    SendData->BufferCount
+                    );
+            if (Processed) {
+                //TODO
+            }
+        }
+        goto Exit;
+    }
 
     char ControlBuffer[CMSG_SPACE(sizeof(struct in6_pktinfo)) + CMSG_SPACE(sizeof(int))] = {0};
 

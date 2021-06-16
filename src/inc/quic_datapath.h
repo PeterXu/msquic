@@ -274,6 +274,19 @@ void
 
 typedef CXPLAT_DATAPATH_RECEIVE_CALLBACK *CXPLAT_DATAPATH_RECEIVE_CALLBACK_HANDLER;
 
+typedef
+_IRQL_requires_max_(DISPATCH_LEVEL)
+_Function_class_(CXPLAT_DATAPATH_EXTERNAL_OUTPUT_CALLBACK)
+BOOLEAN
+(CXPLAT_DATAPATH_EXTERNAL_OUTPUT_CALLBACK)(
+    _In_ CXPLAT_SOCKET* Socket,
+    _In_ void* RecvCallbackContext,
+    _In_ QUIC_BUFFER* Buffers,
+    _In_ uint32_t BufferCount
+    );
+
+typedef CXPLAT_DATAPATH_EXTERNAL_OUTPUT_CALLBACK *CXPLAT_DATAPATH_EXTERNAL_OUTPUT_CALLBACK_HANDLER;
+
 //
 // Function pointer type for datapath port unreachable callbacks.
 //
@@ -295,6 +308,7 @@ typedef CXPLAT_DATAPATH_UNREACHABLE_CALLBACK *CXPLAT_DATAPATH_UNREACHABLE_CALLBA
 typedef struct CXPLAT_UDP_DATAPATH_CALLBACKS {
 
     CXPLAT_DATAPATH_RECEIVE_CALLBACK_HANDLER Receive;
+    CXPLAT_DATAPATH_EXTERNAL_OUTPUT_CALLBACK_HANDLER ExternalOutput;
     CXPLAT_DATAPATH_UNREACHABLE_CALLBACK_HANDLER Unreachable;
 
 } CXPLAT_UDP_DATAPATH_CALLBACKS;
@@ -332,12 +346,26 @@ typedef CXPLAT_DATAPATH_SEND_COMPLETE *CXPLAT_DATAPATH_SEND_COMPLETE_HANDLER;
 //
 _IRQL_requires_max_(PASSIVE_LEVEL)
 QUIC_STATUS
-CxPlatDataPathInitialize(
+CxPlatDataPathInitializeEx(
+    _In_ BOOLEAN ExternalSocket,
     _In_ uint32_t ClientRecvContextLength,
     _In_opt_ const CXPLAT_UDP_DATAPATH_CALLBACKS* UdpCallbacks,
     _In_opt_ const CXPLAT_TCP_DATAPATH_CALLBACKS* TcpCallbacks,
     _Out_ CXPLAT_DATAPATH** NewDatapath
     );
+
+inline
+_IRQL_requires_max_(PASSIVE_LEVEL)
+QUIC_STATUS
+CxPlatDataPathInitialize(
+    _In_ uint32_t ClientRecvContextLength,
+    _In_opt_ const CXPLAT_UDP_DATAPATH_CALLBACKS* UdpCallbacks,
+    _In_opt_ const CXPLAT_TCP_DATAPATH_CALLBACKS* TcpCallbacks,
+    _Out_ CXPLAT_DATAPATH** NewDatapath
+    )
+{
+    return CxPlatDataPathInitializeEx(FALSE, ClientRecvContextLength, UdpCallbacks, TcpCallbacks, NewDatapath);
+}
 
 //
 // Closes a QUIC datapath handle.
@@ -459,11 +487,24 @@ typedef struct CXPLAT_UDP_CONFIG {
 //
 _IRQL_requires_max_(PASSIVE_LEVEL)
 QUIC_STATUS
-CxPlatSocketCreateUdp(
+CxPlatSocketCreateUdpEx(
+    _In_ BOOLEAN ExternalSocket,
     _In_ CXPLAT_DATAPATH* Datapath,
     _In_ const CXPLAT_UDP_CONFIG* Config,
     _Out_ CXPLAT_SOCKET** Socket
     );
+
+inline
+_IRQL_requires_max_(PASSIVE_LEVEL)
+QUIC_STATUS
+CxPlatSocketCreateUdp(
+    _In_ CXPLAT_DATAPATH* Datapath,
+    _In_ const CXPLAT_UDP_CONFIG* Config,
+    _Out_ CXPLAT_SOCKET** Socket
+    )
+{
+    return CxPlatSocketCreateUdpEx(FALSE, Datapath, Config, Socket);
+}
 
 //
 // Creates a TCP socket for the given (optional) local address and (required)
@@ -607,6 +648,14 @@ CxPlatSocketSend(
     _In_ const QUIC_ADDR* RemoteAddress,
     _In_ CXPLAT_SEND_DATA* SendData,
     _In_ uint16_t PartitionId
+    );
+
+_IRQL_requires_max_(DISPATCH_LEVEL)
+QUIC_STATUS
+CxPlatSocketDeliverReceivePacket(
+    _In_ CXPLAT_SOCKET* BindingSocket,
+    _In_ const char *Buffer,
+    _In_ uint32_t Length
     );
 
 //

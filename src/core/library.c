@@ -247,6 +247,7 @@ MsQuicLibraryInitialize(
     uint32_t DefaultMaxPartitionCount = QUIC_MAX_PARTITION_COUNT;
     const CXPLAT_UDP_DATAPATH_CALLBACKS DatapathCallbacks = {
         QuicBindingReceive,
+        QuicBindingExternalOutput,
         QuicBindingUnreachable
     };
 
@@ -1352,7 +1353,9 @@ MsQuicOpen(
     Api->ListenerOpen = MsQuicListenerOpen;
     Api->ListenerClose = MsQuicListenerClose;
     Api->ListenerStart = MsQuicListenerStart;
+    Api->ListenerStartEx = MsQuicListenerStartEx;
     Api->ListenerStop = MsQuicListenerStop;
+    Api->ListenerExternalInput = MsQuicListenerExternalInput;
 
     Api->ConnectionOpen = MsQuicConnectionOpen;
     Api->ConnectionClose = MsQuicConnectionClose;

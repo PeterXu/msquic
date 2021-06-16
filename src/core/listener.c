@@ -160,6 +160,21 @@ MsQuicListenerStart(
     _In_opt_ const QUIC_ADDR* LocalAddress
     )
 {
+    return MsQuicListenerStartEx(Handle, AlpnBuffers, AlpnBufferCount, LocalAddress, NULL);
+}
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+QUIC_STATUS
+QUIC_API
+MsQuicListenerStartEx(
+    _In_ _Pre_defensive_ HQUIC Handle,
+    _In_reads_(AlpnBufferCount) _Pre_defensive_
+        const QUIC_BUFFER* const AlpnBuffers,
+    _In_range_(>, 0) uint32_t AlpnBufferCount,
+    _In_opt_ const QUIC_ADDR* LocalAddress,
+    _In_ _Pre_defensive_ QUIC_EXTERNAL_OUTPUT_CALLBACK_HANDLER OutputHandler
+    )
+{
     QUIC_STATUS Status;
     QUIC_LISTENER* Listener;
     uint8_t* AlpnList;
@@ -304,6 +319,9 @@ MsQuicListenerStart(
             &Listener->LocalAddress,
             QuicAddrGetPort(&BindingLocalAddress));
     }
+
+    Listener->Binding->ClientContext = Listener->ClientContext;
+    Listener->Binding->OutputCallbackHandler = OutputHandler;
 
     QuicTraceEvent(
         ListenerStarted,

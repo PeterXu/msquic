@@ -84,6 +84,9 @@ CxPlatSystemLoad(
     CxPlatProcessorCount = 1;
 #else
     CxPlatProcessorCount = (uint32_t)sysconf(_SC_NPROCESSORS_ONLN);
+#if defined(CX_PLATFORM_LINUX)
+    CxPlatProcessorCount = 1;
+#endif
 #endif
 
 #ifdef DEBUG
@@ -467,6 +470,7 @@ CxPlatProcCurrentNumber(
     )
 {
 #if defined(CX_PLATFORM_LINUX)
+    return 0; // TODO for data-driven
     return (uint32_t)sched_getcpu() % CxPlatProcessorCount;
 #elif defined(CX_PLATFORM_DARWIN)
     //

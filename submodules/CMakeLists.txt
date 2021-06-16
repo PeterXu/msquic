@@ -15,18 +15,25 @@ set(OPENSSL_DIR ${QUIC_BUILD_DIR}/openssl)
 option(QUIC_USE_SYSTEM_LIBCRYPTO "Use system libcrypto if openssl TLS" OFF)
 
 set(OPENSSL_CONFIG_FLAGS
-    enable-tls1_3 no-makedepend no-dgram no-ssl3 no-psk no-srp
+    #enable-tls1_3 no-makedepend no-dgram no-ssl3 no-psk no-srp
+    enable-tls1_3 no-makedepend
+
+    no-afalgeng no-asan no-buildtest-c++ no-crypto-mdebug no-crypto-mdebug-backtrace
+    no-devcryptoeng no-ec_nistp_64_gcc_128 no-egd no-external-tests
+    no-fuzz-afl no-fuzz-libfuzzer no-heartbeats no-md2 no-msan
+    no-rc5 no-sctp no-ssl-trace no-ssl3 no-ssl3-method no-ubsan
+    no-unit-test no-weak-ssl-ciphers no-zlib no-zlib-dynamic
 
     #
     # The following line is needed for the 3.0 branch.
     #
     # no-uplink no-cmp no-acvp_tests no-fips no-padlockeng no-siv
 
-    no-zlib no-egd no-idea no-rc5 no-rc4 no-afalgeng
-    no-comp no-cms no-ct no-srp no-srtp no-ts no-gost no-dso no-ec2m
-    no-tls1 no-tls1_1 no-tls1_2 no-dtls no-dtls1 no-dtls1_2 no-ssl
-    no-ssl3-method no-tls1-method no-tls1_1-method no-tls1_2-method no-dtls1-method no-dtls1_2-method
-    no-siphash no-whirlpool no-aria no-bf no-blake2 no-sm2 no-sm3 no-sm4 no-camellia no-cast no-md4 no-mdc2 no-ocb no-rc2 no-rmd160 no-scrypt
+    #no-zlib no-egd no-idea no-rc5 no-rc4 no-afalgeng
+    #no-comp no-cms no-ct no-srp no-srtp no-ts no-gost no-dso no-ec2m
+    #no-tls1 no-tls1_1 no-tls1_2 no-dtls no-dtls1 no-dtls1_2 no-ssl
+    #no-ssl3-method no-tls1-method no-tls1_1-method no-tls1_2-method no-dtls1-method no-dtls1_2-method
+    #no-siphash no-whirlpool no-aria no-bf no-blake2 no-sm2 no-sm3 no-sm4 no-camellia no-cast no-md4 no-mdc2 no-ocb no-rc2 no-rmd160 no-scrypt
     no-weak-ssl-ciphers no-shared no-tests)
 
 if (WIN32)
