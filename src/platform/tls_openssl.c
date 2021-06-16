@@ -446,7 +446,7 @@ CxPlatTlsAddHandshakeDataCallback(
     QuicTraceLogConnVerbose(
         OpenSslAddHandshakeData,
         TlsContext->Connection,
-        "Sending %llu handshake bytes (Level = %u)",
+        "Sending %" PRIu64 " handshake bytes (Level = %u)",
         (uint64_t)Length,
         (uint32_t)Level);
 
@@ -474,7 +474,7 @@ CxPlatTlsAddHandshakeDataCallback(
         if (NewBuffer == NULL) {
             QuicTraceEvent(
                 AllocFailure,
-                "Allocation of '%s' failed. (%llu bytes)",
+                "Allocation of '%s' failed. (%" PRIu64 " bytes)",
                 "New crypto buffer",
                 NewBufferAllocLength);
             TlsContext->ResultFlags |= CXPLAT_TLS_RESULT_ERROR;
@@ -887,7 +887,7 @@ CxPlatTlsSecConfigCreate(
     if (SecurityConfig == NULL) {
         QuicTraceEvent(
             AllocFailure,
-            "Allocation of '%s' failed. (%llu bytes)",
+            "Allocation of '%s' failed. (%" PRIu64 " bytes)",
             "CXPLAT_SEC_CONFIG",
             sizeof(CXPLAT_SEC_CONFIG));
         Status = QUIC_STATUS_OUT_OF_MEMORY;
@@ -964,7 +964,7 @@ CxPlatTlsSecConfigCreate(
         if (CipherSuiteString == NULL) {
             QuicTraceEvent(
                 AllocFailure,
-                "Allocation of '%s' failed. (%llu bytes)",
+                "Allocation of '%s' failed. (%" PRIu64 " bytes)",
                 "CipherSuiteString",
                 CipherSuiteStringLength);
             Status = QUIC_STATUS_OUT_OF_MEMORY;
@@ -1390,7 +1390,7 @@ CxPlatTlsSecConfigSetTicketKeys(
         if (SecurityConfig->TicketKey == NULL) {
             QuicTraceEvent(
                 AllocFailure,
-                "Allocation of '%s' failed. (%llu bytes)",
+                "Allocation of '%s' failed. (%" PRIu64 " bytes)",
                 "QUIC_TICKET_KEY_CONFIG",
                 sizeof(QUIC_TICKET_KEY_CONFIG));
             return QUIC_STATUS_OUT_OF_MEMORY;
@@ -1426,7 +1426,7 @@ CxPlatTlsInitialize(
     if (TlsContext == NULL) {
         QuicTraceEvent(
             AllocFailure,
-            "Allocation of '%s' failed. (%llu bytes)",
+            "Allocation of '%s' failed. (%" PRIu64 " bytes)",
             "CXPLAT_TLS",
             sizeof(CXPLAT_TLS));
         Status = QUIC_STATUS_OUT_OF_MEMORY;
@@ -1469,7 +1469,7 @@ CxPlatTlsInitialize(
             if (TlsContext->SNI == NULL) {
                 QuicTraceEvent(
                     AllocFailure,
-                    "Allocation of '%s' failed. (%llu bytes)",
+                    "Allocation of '%s' failed. (%" PRIu64 " bytes)",
                     "SNI",
                     ServerNameLength + 1);
                 Status = QUIC_STATUS_OUT_OF_MEMORY;

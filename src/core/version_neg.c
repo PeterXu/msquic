@@ -216,7 +216,7 @@ QuicVersionNegotiationExtParseClientVerNegInfo(
         QuicTraceLogConnError(
             ClientVersionNegotiationInfoDecodeFailed4,
             Connection,
-            "Client version negotiation info too short to contain Recv Negotiation Version list (%hu bytes vs. %llu bytes)",
+            "Client version negotiation info too short to contain Recv Negotiation Version list (%hu bytes vs. %" PRIu64 " bytes)",
             BufferLength,
             ClientVNI->RecvNegotiationVerCount * sizeof(uint32_t));
         return QUIC_STATUS_INVALID_PARAMETER;
@@ -242,7 +242,7 @@ QuicVersionNegotiationExtParseClientVerNegInfo(
         QuicTraceLogConnError(
             ClientVersionNegotiationInfoDecodeFailed6,
             Connection,
-            "Client version negotiation info too short to contain Compatible Version list (%hu bytes vs. %llu bytes)",
+            "Client version negotiation info too short to contain Compatible Version list (%hu bytes vs. %" PRIu64 " bytes)",
             BufferLength,
             ClientVNI->CompatibleVersionCount * sizeof(uint32_t));
         return QUIC_STATUS_INVALID_PARAMETER;
@@ -273,7 +273,7 @@ QuicVersionNegotiationExtParseClientVerNegInfo(
     QuicTraceLogConnInfo(
         ClientVersionNegotiationInfoDecoded,
         Connection,
-        "Client VNI Decoded: Current Ver:%x Prev Ver:%x Recv Ver Count:%llu Compat Ver Count:%llu",
+        "Client VNI Decoded: Current Ver:%x Prev Ver:%x Recv Ver Count:%" PRIu64 " Compat Ver Count:%" PRIu64 "",
         ClientVNI->CurrentVersion,
         ClientVNI->PreviousVersion,
         ClientVNI->RecvNegotiationVerCount,
@@ -328,7 +328,7 @@ QuicVersionNegotiationExtParseServerVerNegInfo(
         QuicTraceLogConnError(
             ServerVersionNegotiationInfoDecodeFailed3,
             Connection,
-            "Server version negotiation info too short to contain Supported Versions list (%hu bytes vs. %llu bytes)",
+            "Server version negotiation info too short to contain Supported Versions list (%hu bytes vs. %" PRIu64 " bytes)",
             BufferLength,
             ServerVNI->SupportedVersionCount * sizeof(uint32_t));
         return QUIC_STATUS_INVALID_PARAMETER;
@@ -358,7 +358,7 @@ QuicVersionNegotiationExtParseServerVerNegInfo(
     QuicTraceLogConnInfo(
         ServerVersionNegotiationInfoDecoded,
         Connection,
-        "Server VNI Decoded: Negotiated Ver:%x Supported Ver Count:%llu",
+        "Server VNI Decoded: Negotiated Ver:%x Supported Ver Count:%" PRIu64 "",
         ServerVNI->NegotiatedVersion,
         ServerVNI->SupportedVersionCount);
 
@@ -403,7 +403,7 @@ QuicVersionNegotiationExtEncodeVersionNegotiationInfo(
         if (VersionNegotiationInfo == NULL) {
             QuicTraceEvent(
                 AllocFailure,
-                "Allocation of '%s' failed. (%llu bytes)",
+                "Allocation of '%s' failed. (%" PRIu64 " bytes)",
                 "Server Version Negotiation Info",
                 VNILen);
             return NULL;
@@ -456,7 +456,7 @@ QuicVersionNegotiationExtEncodeVersionNegotiationInfo(
         if (VersionNegotiationInfo == NULL) {
             QuicTraceEvent(
                 AllocFailure,
-                "Allocation of '%s' failed. (%llu bytes)",
+                "Allocation of '%s' failed. (%" PRIu64 " bytes)",
                 "Client Version Negotiation Info",
                 VNILen);
             return NULL;

@@ -1263,7 +1263,7 @@ QuicFrameLog(
     if (!QUIC_FRAME_IS_KNOWN(FrameType)) {
         QuicTraceLogVerbose(
             FrameLogUnknownType,
-            "[%c][%cX][%llu]   unknown frame (%llu)",
+            "[%c][%cX][%" PRIu64 "]   unknown frame (%" PRIu64 ")",
             PtkConnPre(Connection),
             PktRxPre(Rx),
             PacketNumber,
@@ -1281,7 +1281,7 @@ QuicFrameLog(
         }
         QuicTraceLogVerbose(
             FrameLogPadding,
-            "[%c][%cX][%llu]   PADDING Len:%hu",
+            "[%c][%cX][%" PRIu64 "]   PADDING Len:%hu",
             PtkConnPre(Connection),
             PktRxPre(Rx),
             PacketNumber,
@@ -1292,7 +1292,7 @@ QuicFrameLog(
     case QUIC_FRAME_PING: {
         QuicTraceLogVerbose(
             FrameLogPing,
-            "[%c][%cX][%llu]   PING",
+            "[%c][%cX][%" PRIu64 "]   PING",
             PtkConnPre(Connection),
             PktRxPre(Rx),
             PacketNumber);
@@ -1305,7 +1305,7 @@ QuicFrameLog(
         if (!QuicAckHeaderDecode(PacketLength, Packet, Offset, &Frame)) {
             QuicTraceLogVerbose(
                 FrameLogAckInvalid,
-                "[%c][%cX][%llu]   ACK [Invalid]",
+                "[%c][%cX][%" PRIu64 "]   ACK [Invalid]",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber);
@@ -1314,7 +1314,7 @@ QuicFrameLog(
 
         QuicTraceLogVerbose(
             FrameLogAck,
-            "[%c][%cX][%llu]   ACK Largest:%llu Delay:%llu",
+            "[%c][%cX][%" PRIu64 "]   ACK Largest:%" PRIu64 " Delay:%" PRIu64 "",
             PtkConnPre(Connection),
             PktRxPre(Rx),
             PacketNumber,
@@ -1324,7 +1324,7 @@ QuicFrameLog(
         if (Frame.FirstAckBlock == 0) {
             QuicTraceLogVerbose(
                 FrameLogAckSingleBlock,
-                "[%c][%cX][%llu]     %llu",
+                "[%c][%cX][%" PRIu64 "]     %" PRIu64 "",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber,
@@ -1332,7 +1332,7 @@ QuicFrameLog(
         } else {
             QuicTraceLogVerbose(
                 FrameLogAckMultiBlock,
-                "[%c][%cX][%llu]     %llu - %llu",
+                "[%c][%cX][%" PRIu64 "]     %" PRIu64 " - %" PRIu64 "",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber,
@@ -1347,7 +1347,7 @@ QuicFrameLog(
             if (!QuicAckBlockDecode(PacketLength, Packet, Offset, &Block)) {
                 QuicTraceLogVerbose(
                     FrameLogAckInvalidBlock,
-                    "[%c][%cX][%llu]     [Invalid Block]",
+                    "[%c][%cX][%" PRIu64 "]     [Invalid Block]",
                     PtkConnPre(Connection),
                     PktRxPre(Rx),
                     PacketNumber);
@@ -1359,7 +1359,7 @@ QuicFrameLog(
             if (Block.AckBlock == 0) {
                 QuicTraceLogVerbose(
                     FrameLogAckSingleBlock,
-                    "[%c][%cX][%llu]     %llu",
+                    "[%c][%cX][%" PRIu64 "]     %" PRIu64 "",
                     PtkConnPre(Connection),
                     PktRxPre(Rx),
                     PacketNumber,
@@ -1367,7 +1367,7 @@ QuicFrameLog(
             } else {
                 QuicTraceLogVerbose(
                     FrameLogAckMultiBlock,
-                    "[%c][%cX][%llu]     %llu - %llu",
+                    "[%c][%cX][%" PRIu64 "]     %" PRIu64 " - %" PRIu64 "",
                     PtkConnPre(Connection),
                     PktRxPre(Rx),
                     PacketNumber,
@@ -1385,7 +1385,7 @@ QuicFrameLog(
                 !QuicVarIntDecode(PacketLength, Packet, Offset, &Ecn.CE_Count)) {
                 QuicTraceLogVerbose(
                     FrameLogAckEcnInvalid,
-                    "[%c][%cX][%llu]     ECN [Invalid]",
+                    "[%c][%cX][%" PRIu64 "]     ECN [Invalid]",
                     PtkConnPre(Connection),
                     PktRxPre(Rx),
                     PacketNumber);
@@ -1393,7 +1393,7 @@ QuicFrameLog(
             }
             QuicTraceLogVerbose(
                 FrameLogAckEcn,
-                "[%c][%cX][%llu]     ECN [ECT0=%llu,ECT1=%llu,CE=%llu]",
+                "[%c][%cX][%" PRIu64 "]     ECN [ECT0=%" PRIu64 ",ECT1=%" PRIu64 ",CE=%" PRIu64 "]",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber,
@@ -1410,7 +1410,7 @@ QuicFrameLog(
         if (!QuicResetStreamFrameDecode(PacketLength, Packet, Offset, &Frame)) {
             QuicTraceLogVerbose(
                 FrameLogResetStreamInvalid,
-                "[%c][%cX][%llu]   RESET_STREAM [Invalid]",
+                "[%c][%cX][%" PRIu64 "]   RESET_STREAM [Invalid]",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber);
@@ -1419,7 +1419,7 @@ QuicFrameLog(
 
         QuicTraceLogVerbose(
             FrameLogResetStream,
-            "[%c][%cX][%llu]   RESET_STREAM ID:%llu ErrorCode:0x%llX FinalSize:%llu",
+            "[%c][%cX][%" PRIu64 "]   RESET_STREAM ID:%" PRIu64 " ErrorCode:0x%" PRIX64 " FinalSize:%" PRIu64 "",
             PtkConnPre(Connection),
             PktRxPre(Rx),
             PacketNumber,
@@ -1434,7 +1434,7 @@ QuicFrameLog(
         if (!QuicStopSendingFrameDecode(PacketLength, Packet, Offset, &Frame)) {
             QuicTraceLogVerbose(
                 FrameLogStopSendingInvalid,
-                "[%c][%cX][%llu]   STOP_SENDING [Invalid]",
+                "[%c][%cX][%" PRIu64 "]   STOP_SENDING [Invalid]",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber);
@@ -1443,7 +1443,7 @@ QuicFrameLog(
 
         QuicTraceLogVerbose(
             FrameLogStopSending,
-            "[%c][%cX][%llu]   STOP_SENDING ID:%llu Error:0x%llX",
+            "[%c][%cX][%" PRIu64 "]   STOP_SENDING ID:%" PRIu64 " Error:0x%" PRIX64 "",
             PtkConnPre(Connection),
             PktRxPre(Rx),
             PacketNumber,
@@ -1457,7 +1457,7 @@ QuicFrameLog(
         if (!QuicCryptoFrameDecode(PacketLength, Packet, Offset, &Frame)) {
             QuicTraceLogVerbose(
                 FrameLogCryptoInvalid,
-                "[%c][%cX][%llu]   CRYPTO [Invalid]",
+                "[%c][%cX][%" PRIu64 "]   CRYPTO [Invalid]",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber);
@@ -1466,7 +1466,7 @@ QuicFrameLog(
 
         QuicTraceLogVerbose(
             FrameLogCrypto,
-            "[%c][%cX][%llu]   CRYPTO Offset:%llu Len:%hu",
+            "[%c][%cX][%" PRIu64 "]   CRYPTO Offset:%" PRIu64 " Len:%hu",
             PtkConnPre(Connection),
             PktRxPre(Rx),
             PacketNumber,
@@ -1481,7 +1481,7 @@ QuicFrameLog(
         if (!QuicNewTokenFrameDecode(PacketLength, Packet, Offset, &Frame)) {
             QuicTraceLogVerbose(
                 FrameLogNewTokenInvalid,
-                "[%c][%cX][%llu]   NEW_TOKEN [Invalid]",
+                "[%c][%cX][%" PRIu64 "]   NEW_TOKEN [Invalid]",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber);
@@ -1490,7 +1490,7 @@ QuicFrameLog(
 
         QuicTraceLogVerbose(
             FrameLogNewToken,
-            "[%c][%cX][%llu]   NEW_TOKEN Length:%llu",
+            "[%c][%cX][%" PRIu64 "]   NEW_TOKEN Length:%" PRIu64 "",
             PtkConnPre(Connection),
             PktRxPre(Rx),
             PacketNumber,
@@ -1511,7 +1511,7 @@ QuicFrameLog(
         if (!QuicStreamFrameDecode(FrameType, PacketLength, Packet, Offset, &Frame)) {
             QuicTraceLogVerbose(
                 FrameLogStreamInvalid,
-                "[%c][%cX][%llu]   STREAM [Invalid]",
+                "[%c][%cX][%" PRIu64 "]   STREAM [Invalid]",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber);
@@ -1521,7 +1521,7 @@ QuicFrameLog(
         if (Frame.Fin) {
             QuicTraceLogVerbose(
                 FrameLogStreamFin,
-                "[%c][%cX][%llu]   STREAM ID:%llu Offset:%llu Len:%hu Fin",
+                "[%c][%cX][%" PRIu64 "]   STREAM ID:%" PRIu64 " Offset:%" PRIu64 " Len:%hu Fin",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber,
@@ -1531,7 +1531,7 @@ QuicFrameLog(
         } else {
             QuicTraceLogVerbose(
                 FrameLogStream,
-                "[%c][%cX][%llu]   STREAM ID:%llu Offset:%llu Len:%hu",
+                "[%c][%cX][%" PRIu64 "]   STREAM ID:%" PRIu64 " Offset:%" PRIu64 " Len:%hu",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber,
@@ -1548,7 +1548,7 @@ QuicFrameLog(
         if (!QuicMaxDataFrameDecode(PacketLength, Packet, Offset, &Frame)) {
             QuicTraceLogVerbose(
                 FrameLogMaxDataInvalid,
-                "[%c][%cX][%llu]   MAX_DATA [Invalid]",
+                "[%c][%cX][%" PRIu64 "]   MAX_DATA [Invalid]",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber);
@@ -1557,7 +1557,7 @@ QuicFrameLog(
 
         QuicTraceLogVerbose(
             FrameLogMaxData,
-            "[%c][%cX][%llu]   MAX_DATA Max:%llu",
+            "[%c][%cX][%" PRIu64 "]   MAX_DATA Max:%" PRIu64 "",
             PtkConnPre(Connection),
             PktRxPre(Rx),
             PacketNumber,
@@ -1570,7 +1570,7 @@ QuicFrameLog(
         if (!QuicMaxStreamDataFrameDecode(PacketLength, Packet, Offset, &Frame)) {
             QuicTraceLogVerbose(
                 FrameLogMaxStreamDataInvalid,
-                "[%c][%cX][%llu]   MAX_STREAM_DATA [Invalid]",
+                "[%c][%cX][%" PRIu64 "]   MAX_STREAM_DATA [Invalid]",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber);
@@ -1579,7 +1579,7 @@ QuicFrameLog(
 
         QuicTraceLogVerbose(
             FrameLogMaxStreamData,
-            "[%c][%cX][%llu]   MAX_STREAM_DATA ID:%llu Max:%llu",
+            "[%c][%cX][%" PRIu64 "]   MAX_STREAM_DATA ID:%" PRIu64 " Max:%" PRIu64 "",
             PtkConnPre(Connection),
             PktRxPre(Rx),
             PacketNumber,
@@ -1594,7 +1594,7 @@ QuicFrameLog(
         if (!QuicMaxStreamsFrameDecode(FrameType, PacketLength, Packet, Offset, &Frame)) {
             QuicTraceLogVerbose(
                 FrameLogMaxStreamsInvalid,
-                "[%c][%cX][%llu]   MAX_STREAMS [Invalid]",
+                "[%c][%cX][%" PRIu64 "]   MAX_STREAMS [Invalid]",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber);
@@ -1603,7 +1603,7 @@ QuicFrameLog(
 
         QuicTraceLogVerbose(
             FrameLogMaxStreams,
-            "[%c][%cX][%llu]   MAX_STREAMS[%hu] Count:%llu",
+            "[%c][%cX][%" PRIu64 "]   MAX_STREAMS[%hu] Count:%" PRIu64 "",
             PtkConnPre(Connection),
             PktRxPre(Rx),
             PacketNumber,
@@ -1617,7 +1617,7 @@ QuicFrameLog(
         if (!QuicDataBlockedFrameDecode(PacketLength, Packet, Offset, &Frame)) {
             QuicTraceLogVerbose(
                 FrameLogDataBlockedInvalid,
-                "[%c][%cX][%llu]   DATA_BLOCKED [Invalid]",
+                "[%c][%cX][%" PRIu64 "]   DATA_BLOCKED [Invalid]",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber);
@@ -1625,7 +1625,7 @@ QuicFrameLog(
         }
         QuicTraceLogVerbose(
             FrameLogDataBlocked,
-            "[%c][%cX][%llu]   DATA_BLOCKED Limit:%llu",
+            "[%c][%cX][%" PRIu64 "]   DATA_BLOCKED Limit:%" PRIu64 "",
             PtkConnPre(Connection),
             PktRxPre(Rx),
             PacketNumber,
@@ -1638,7 +1638,7 @@ QuicFrameLog(
         if (!QuicStreamDataBlockedFrameDecode(PacketLength, Packet, Offset, &Frame)) {
             QuicTraceLogVerbose(
                 FrameLogStreamDataBlockedInvalid,
-                "[%c][%cX][%llu]   STREAM_DATA_BLOCKED [Invalid]",
+                "[%c][%cX][%" PRIu64 "]   STREAM_DATA_BLOCKED [Invalid]",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber);
@@ -1647,7 +1647,7 @@ QuicFrameLog(
 
         QuicTraceLogVerbose(
             FrameLogStreamDataBlocked,
-            "[%c][%cX][%llu]   STREAM_DATA_BLOCKED ID:%llu Limit:%llu",
+            "[%c][%cX][%" PRIu64 "]   STREAM_DATA_BLOCKED ID:%" PRIu64 " Limit:%" PRIu64 "",
             PtkConnPre(Connection),
             PktRxPre(Rx),
             PacketNumber,
@@ -1662,7 +1662,7 @@ QuicFrameLog(
         if (!QuicStreamsBlockedFrameDecode(FrameType, PacketLength, Packet, Offset, &Frame)) {
             QuicTraceLogVerbose(
                 FrameLogStreamsBlockedInvalid,
-                "[%c][%cX][%llu]   STREAMS_BLOCKED [Invalid]",
+                "[%c][%cX][%" PRIu64 "]   STREAMS_BLOCKED [Invalid]",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber);
@@ -1671,7 +1671,7 @@ QuicFrameLog(
 
         QuicTraceLogVerbose(
             FrameLogStreamsBlocked,
-            "[%c][%cX][%llu]   STREAMS_BLOCKED[%hu] ID:%llu",
+            "[%c][%cX][%" PRIu64 "]   STREAMS_BLOCKED[%hu] ID:%" PRIu64 "",
             PtkConnPre(Connection),
             PktRxPre(Rx),
             PacketNumber,
@@ -1685,7 +1685,7 @@ QuicFrameLog(
         if (!QuicNewConnectionIDFrameDecode(PacketLength, Packet, Offset, &Frame)) {
             QuicTraceLogVerbose(
                 FrameLogNewConnectionIDInvalid,
-                "[%c][%cX][%llu]   NEW_CONN_ID [Invalid]",
+                "[%c][%cX][%" PRIu64 "]   NEW_CONN_ID [Invalid]",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber);
@@ -1694,7 +1694,7 @@ QuicFrameLog(
 
         QuicTraceLogVerbose(
             FrameLogNewConnectionID,
-            "[%c][%cX][%llu]   NEW_CONN_ID Seq:%llu RPT:%llu CID:%s Token:%s",
+            "[%c][%cX][%" PRIu64 "]   NEW_CONN_ID Seq:%" PRIu64 " RPT:%" PRIu64 " CID:%s Token:%s",
             PtkConnPre(Connection),
             PktRxPre(Rx),
             PacketNumber,
@@ -1710,7 +1710,7 @@ QuicFrameLog(
         if (!QuicRetireConnectionIDFrameDecode(PacketLength, Packet, Offset, &Frame)) {
             QuicTraceLogVerbose(
                 FrameLogRetireConnectionIDInvalid,
-                "[%c][%cX][%llu]   RETIRE_CONN_ID [Invalid]",
+                "[%c][%cX][%" PRIu64 "]   RETIRE_CONN_ID [Invalid]",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber);
@@ -1719,7 +1719,7 @@ QuicFrameLog(
 
         QuicTraceLogVerbose(
             FrameLogRetireConnectionID,
-            "[%c][%cX][%llu]   RETIRE_CONN_ID Seq:%llu",
+            "[%c][%cX][%" PRIu64 "]   RETIRE_CONN_ID Seq:%" PRIu64 "",
             PtkConnPre(Connection),
             PktRxPre(Rx),
             PacketNumber,
@@ -1732,7 +1732,7 @@ QuicFrameLog(
         if (!QuicPathChallengeFrameDecode(PacketLength, Packet, Offset, &Frame)) {
             QuicTraceLogVerbose(
                 FrameLogPathChallengeInvalid,
-                "[%c][%cX][%llu]   PATH_CHALLENGE [Invalid]",
+                "[%c][%cX][%" PRIu64 "]   PATH_CHALLENGE [Invalid]",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber);
@@ -1741,7 +1741,7 @@ QuicFrameLog(
 
         QuicTraceLogVerbose(
             FrameLogPathChallenge,
-            "[%c][%cX][%llu]   PATH_CHALLENGE [%llu]",
+            "[%c][%cX][%" PRIu64 "]   PATH_CHALLENGE [%" PRIu64 "]",
             PtkConnPre(Connection),
             PktRxPre(Rx),
             PacketNumber,
@@ -1754,7 +1754,7 @@ QuicFrameLog(
         if (!QuicPathChallengeFrameDecode(PacketLength, Packet, Offset, &Frame)) {
             QuicTraceLogVerbose(
                 FrameLogPathResponseInvalid,
-                "[%c][%cX][%llu]   PATH_RESPONSE [Invalid]",
+                "[%c][%cX][%" PRIu64 "]   PATH_RESPONSE [Invalid]",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber);
@@ -1763,7 +1763,7 @@ QuicFrameLog(
 
         QuicTraceLogVerbose(
             FrameLogPathResponse,
-            "[%c][%cX][%llu]   PATH_RESPONSE [%llu]",
+            "[%c][%cX][%" PRIu64 "]   PATH_RESPONSE [%" PRIu64 "]",
             PtkConnPre(Connection),
             PktRxPre(Rx),
             PacketNumber,
@@ -1777,7 +1777,7 @@ QuicFrameLog(
         if (!QuicConnCloseFrameDecode(FrameType, PacketLength, Packet, Offset, &Frame)) {
             QuicTraceLogVerbose(
                 FrameLogConnectionCloseInvalid,
-                "[%c][%cX][%llu]   CONN_CLOSE [Invalid]",
+                "[%c][%cX][%" PRIu64 "]   CONN_CLOSE [Invalid]",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber);
@@ -1787,7 +1787,7 @@ QuicFrameLog(
         if (Frame.ApplicationClosed) {
             QuicTraceLogVerbose(
                 FrameLogConnectionCloseApp,
-                "[%c][%cX][%llu]   CONN_CLOSE (App) ErrorCode:0x%llX",
+                "[%c][%cX][%" PRIu64 "]   CONN_CLOSE (App) ErrorCode:0x%" PRIX64 "",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber,
@@ -1795,7 +1795,7 @@ QuicFrameLog(
         } else {
             QuicTraceLogVerbose(
                 FrameLogConnectionClose,
-                "[%c][%cX][%llu]   CONN_CLOSE ErrorCode:0x%llX FrameType:%llu",
+                "[%c][%cX][%" PRIu64 "]   CONN_CLOSE ErrorCode:0x%" PRIX64 " FrameType:%" PRIu64 "",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber,
@@ -1808,7 +1808,7 @@ QuicFrameLog(
     case QUIC_FRAME_HANDSHAKE_DONE: {
         QuicTraceLogVerbose(
             FrameLogHandshakeDone,
-            "[%c][%cX][%llu]   HANDSHAKE_DONE",
+            "[%c][%cX][%" PRIu64 "]   HANDSHAKE_DONE",
             PtkConnPre(Connection),
             PktRxPre(Rx),
             PacketNumber);
@@ -1821,7 +1821,7 @@ QuicFrameLog(
         if (!QuicDatagramFrameDecode(FrameType, PacketLength, Packet, Offset, &Frame)) {
             QuicTraceLogVerbose(
                 FrameLogDatagramInvalid,
-                "[%c][%cX][%llu]   DATAGRAM [Invalid]",
+                "[%c][%cX][%" PRIu64 "]   DATAGRAM [Invalid]",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber);
@@ -1829,7 +1829,7 @@ QuicFrameLog(
         }
         QuicTraceLogVerbose(
             FrameLogDatagram,
-            "[%c][%cX][%llu]   DATAGRAM Len:%hu",
+            "[%c][%cX][%" PRIu64 "]   DATAGRAM Len:%hu",
             PtkConnPre(Connection),
             PktRxPre(Rx),
             PacketNumber,
@@ -1842,7 +1842,7 @@ QuicFrameLog(
         if (!QuicAckFrequencyFrameDecode(PacketLength, Packet, Offset, &Frame)) {
             QuicTraceLogVerbose(
                 FrameLogAckFrequencyInvalid,
-                "[%c][%cX][%llu]   ACK_FREQUENCY [Invalid]",
+                "[%c][%cX][%" PRIu64 "]   ACK_FREQUENCY [Invalid]",
                 PtkConnPre(Connection),
                 PktRxPre(Rx),
                 PacketNumber);
@@ -1851,7 +1851,7 @@ QuicFrameLog(
 
         QuicTraceLogVerbose(
             FrameLogAckFrequency,
-            "[%c][%cX][%llu]   ACK_FREQUENCY SeqNum:%llu PktTolerance:%llu MaxAckDelay:%llu IgnoreOrder:%hhu",
+            "[%c][%cX][%" PRIu64 "]   ACK_FREQUENCY SeqNum:%" PRIu64 " PktTolerance:%" PRIu64 " MaxAckDelay:%" PRIu64 " IgnoreOrder:%hhu",
             PtkConnPre(Connection),
             PktRxPre(Rx),
             PacketNumber,

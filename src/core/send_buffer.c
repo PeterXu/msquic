@@ -92,7 +92,7 @@ QuicSendBufferAlloc(
     } else {
         QuicTraceEvent(
             AllocFailure,
-            "Allocation of '%s' failed. (%llu bytes)",
+            "Allocation of '%s' failed. (%" PRIu64 " bytes)",
             "sendbuffer",
             Size);
     }
@@ -240,7 +240,7 @@ QuicSendBufferStreamAdjust(
         QuicTraceLogStreamVerbose(
             IndicateIdealSendBuffer,
             Stream,
-            "Indicating QUIC_STREAM_EVENT_IDEAL_SEND_BUFFER_SIZE = %llu",
+            "Indicating QUIC_STREAM_EVENT_IDEAL_SEND_BUFFER_SIZE = %" PRIu64 "",
             Event.IDEAL_SEND_BUFFER_SIZE.ByteCount);
         (void)QuicStreamIndicateEvent(Stream, &Event);
     }

@@ -31,6 +31,8 @@ Abstract:
 
 #pragma once
 
+#include <inttypes.h>
+
 #if !defined(QUIC_CLOG)
 #if !defined(QUIC_EVENTS_STUB) && !defined(QUIC_EVENTS_MANIFEST_ETW)
 #error "Must define one QUIC_EVENTS_*"
@@ -94,8 +96,21 @@ typedef enum QUIC_TRACE_API_TYPE {
     QUIC_TRACE_API_STREAM_RECEIVE_COMPLETE,
     QUIC_TRACE_API_STREAM_RECEIVE_SET_ENABLED,
     QUIC_TRACE_API_DATAGRAM_SEND,
+    QUIC_TRACE_API_EXTERNAL_INPUT,
     QUIC_TRACE_API_COUNT // Must be last
 } QUIC_TRACE_API_TYPE;
+
+#ifndef PRIu64
+# if __WORDSIZE == 64
+# define PRIu64 "lu"
+# define PRIx64 "lx"
+# define PRIX64 "lX"
+# else
+# define PRIu64 "llu"
+# define PRIx64 "llx"
+# define PRIX64 "llX"
+#endif
+#endif
 
 //
 // Called from the platform code to trigger a tracing rundown for all objects
@@ -196,9 +211,9 @@ QuicEtwCallback(
 
 #ifdef QUIC_LOGS_STUB
 
-#define QuicTraceLogErrorEnabled()   FALSE
-#define QuicTraceLogWarningEnabled() FALSE
-#define QuicTraceLogInfoEnabled()    FALSE
+#define QuicTraceLogErrorEnabled()   TRUE
+#define QuicTraceLogWarningEnabled() TRUE
+#define QuicTraceLogInfoEnabled()    TRUE
 #define QuicTraceLogVerboseEnabled() FALSE
 
 inline
@@ -211,22 +226,28 @@ QuicTraceStubVarArgs(
     UNREFERENCED_PARAMETER(Fmt);
 }
 
-#define QuicTraceLogError(X,...)            QuicTraceStubVarArgs(__VA_ARGS__)
-#define QuicTraceLogWarning(X,...)          QuicTraceStubVarArgs(__VA_ARGS__)
-#define QuicTraceLogInfo(X,...)             QuicTraceStubVarArgs(__VA_ARGS__)
-#define QuicTraceLogVerbose(X,...)          QuicTraceStubVarArgs(__VA_ARGS__)
+#define QuicTraceStubVarArgs2(Level, From, Fmt, ...) \
+    if (QuicTraceLog##Level##Enabled()) { \
+        UNREFERENCED_PARAMETER(From); \
+        fprintf(stdout, "[" #Level "] " Fmt "\n", ##__VA_ARGS__); \
+    }
 
-#define QuicTraceLogConnError(X,...)        QuicTraceStubVarArgs(__VA_ARGS__)
-#define QuicTraceLogConnWarning(X,...)      QuicTraceStubVarArgs(__VA_ARGS__)
-#define QuicTraceLogConnInfo(X,...)         QuicTraceStubVarArgs(__VA_ARGS__)
-#define QuicTraceLogConnVerbose(X,...)      QuicTraceStubVarArgs(__VA_ARGS__)
+#define QuicTraceLogError(X,Fmt,...)            QuicTraceStubVarArgs2(Error,NULL,Fmt,##__VA_ARGS__)
+#define QuicTraceLogWarning(X,Fmt,...)          QuicTraceStubVarArgs2(Warning,NULL,Fmt,##__VA_ARGS__)
+#define QuicTraceLogInfo(X,Fmt,...)             QuicTraceStubVarArgs2(Info,NULL,Fmt,##__VA_ARGS__)
+#define QuicTraceLogVerbose(X,Fmt,...)          QuicTraceStubVarArgs2(Verbose,NULL,Fmt,##__VA_ARGS__)
 
-#define QuicTraceLogStreamVerboseEnabled() FALSE
+#define QuicTraceLogConnError(X,Ptr,Fmt,...)        QuicTraceStubVarArgs2(Error,Ptr,Fmt,##__VA_ARGS__)
+#define QuicTraceLogConnWarning(X,Ptr,Fmt,...)      QuicTraceStubVarArgs2(Warning,Ptr,Fmt,##__VA_ARGS__)
+#define QuicTraceLogConnInfo(X,Ptr,Fmt,...)         QuicTraceStubVarArgs2(Info,Ptr,Fmt,##__VA_ARGS__)
+#define QuicTraceLogConnVerbose(X,Ptr,Fmt,...)      QuicTraceStubVarArgs2(Verbose,Ptr,Fmt,##__VA_ARGS__)
 
-#define QuicTraceLogStreamError(X,...)      QuicTraceStubVarArgs(__VA_ARGS__)
-#define QuicTraceLogStreamWarning(X,...)    QuicTraceStubVarArgs(__VA_ARGS__)
-#define QuicTraceLogStreamInfo(X,...)       QuicTraceStubVarArgs(__VA_ARGS__)
-#define QuicTraceLogStreamVerbose(X,...)    QuicTraceStubVarArgs(__VA_ARGS__)
+#define QuicTraceLogStreamVerboseEnabled() TRUE
+
+#define QuicTraceLogStreamError(X,Ptr,Fmt,...)      QuicTraceStubVarArgs2(Error,Ptr,Fmt,##__VA_ARGS__)
+#define QuicTraceLogStreamWarning(X,Ptr,Fmt,...)    QuicTraceStubVarArgs2(Warning,Ptr,Fmt,##__VA_ARGS__)
+#define QuicTraceLogStreamInfo(X,Ptr,Fmt,...)       QuicTraceStubVarArgs2(Info,Ptr,Fmt,##__VA_ARGS__)
+#define QuicTraceLogStreamVerbose(X,Ptr,Fmt,...)    QuicTraceStubVarArgs2(Verbose,Ptr,Fmt,##__VA_ARGS__)
 
 #endif // QUIC_LOGS_STUB
 

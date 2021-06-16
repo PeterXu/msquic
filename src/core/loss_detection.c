@@ -132,7 +132,7 @@ QuicLossDetectionUninitialize(
         if (Packet->Flags.IsAckEliciting) {
             QuicTraceLogVerbose(
                 PacketTxDiscarded,
-                "[%c][TX][%llu] Thrown away on shutdown",
+                "[%c][TX][%" PRIu64 "] Thrown away on shutdown",
                 PtkConnPre(Connection),
                 Packet->PacketNumber);
 
@@ -146,7 +146,7 @@ QuicLossDetectionUninitialize(
 
         QuicTraceLogVerbose(
             PacketTxLostDiscarded,
-            "[%c][TX][%llu] Thrown away on shutdown (lost packet)",
+            "[%c][TX][%" PRIu64 "] Thrown away on shutdown (lost packet)",
             PtkConnPre(Connection),
             Packet->PacketNumber);
 
@@ -907,7 +907,7 @@ QuicLossDetectionDetectAndHandleLostPackets(
                 CxPlatTimeDiff32(Packet->SentTime, TimeNow) > TwoPto) {
             QuicTraceLogVerbose(
                 PacketTxForget,
-                "[%c][TX][%llu] Forgetting",
+                "[%c][TX][%" PRIu64 "] Forgetting",
                 PtkConnPre(Connection),
                 Packet->PacketNumber);
             LossDetection->LostPackets = Packet->Next;
@@ -953,13 +953,13 @@ QuicLossDetectionDetectAndHandleLostPackets(
                 if (!NonretransmittableHandshakePacket) {
                     QuicTraceLogVerbose(
                         PacketTxLostFack,
-                        "[%c][TX][%llu] Lost: FACK %llu packets",
+                        "[%c][TX][%" PRIu64 "] Lost: FACK %" PRIu64 " packets",
                         PtkConnPre(Connection),
                         Packet->PacketNumber,
                         LossDetection->LargestAck - Packet->PacketNumber);
                     QuicTraceEvent(
                         ConnPacketLost,
-                        "[conn][%p][TX][%llu] %hhu Lost: %hhu",
+                        "[conn][%p][TX][%" PRIu64 "] %hhu Lost: %hhu",
                         Connection,
                         Packet->PacketNumber,
                         QuicPacketTraceType(Packet),
@@ -970,13 +970,13 @@ QuicLossDetectionDetectAndHandleLostPackets(
                 if (!NonretransmittableHandshakePacket) {
                     QuicTraceLogVerbose(
                         PacketTxLostRack,
-                        "[%c][TX][%llu] Lost: RACK %lu ms",
+                        "[%c][TX][%" PRIu64 "] Lost: RACK %u ms",
                         PtkConnPre(Connection),
                         Packet->PacketNumber,
                         CxPlatTimeDiff32(Packet->SentTime, TimeNow));
                     QuicTraceEvent(
                         ConnPacketLost,
-                        "[conn][%p][TX][%llu] %hhu Lost: %hhu",
+                        "[conn][%p][TX][%" PRIu64 "] %hhu Lost: %hhu",
                         Connection,
                         Packet->PacketNumber,
                         QuicPacketTraceType(Packet),
@@ -1081,12 +1081,12 @@ QuicLossDetectionDiscardPackets(
 
             QuicTraceLogVerbose(
                 PacketTxAckedImplicit,
-                "[%c][TX][%llu] ACKed (implicit)",
+                "[%c][TX][%" PRIu64 "] ACKed (implicit)",
                 PtkConnPre(Connection),
                 Packet->PacketNumber);
             QuicTraceEvent(
                 ConnPacketACKed,
-                "[conn][%p][TX][%llu] %hhu ACKed",
+                "[conn][%p][TX][%" PRIu64 "] %hhu ACKed",
                 Connection,
                 Packet->PacketNumber,
                 QuicPacketTraceType(Packet));
@@ -1122,12 +1122,12 @@ QuicLossDetectionDiscardPackets(
 
             QuicTraceLogVerbose(
                 PacketTxAckedImplicit,
-                "[%c][TX][%llu] ACKed (implicit)",
+                "[%c][TX][%" PRIu64 "] ACKed (implicit)",
                 PtkConnPre(Connection),
                 Packet->PacketNumber);
             QuicTraceEvent(
                 ConnPacketACKed,
-                "[conn][%p][TX][%llu] %hhu ACKed",
+                "[conn][%p][TX][%" PRIu64 "] %hhu ACKed",
                 Connection,
                 Packet->PacketNumber,
                 QuicPacketTraceType(Packet));
@@ -1200,7 +1200,7 @@ QuicLossDetectionOnZeroRttRejected(
 
             QuicTraceLogVerbose(
                 PacketTx0RttRejected,
-                "[%c][TX][%llu] Rejected",
+                "[%c][TX][%" PRIu64 "] Rejected",
                 PtkConnPre(Connection),
                 Packet->PacketNumber);
 
@@ -1278,7 +1278,7 @@ QuicLossDetectionProcessAckBlocks(
             while (*End && (*End)->PacketNumber <= QuicRangeGetHigh(AckBlock)) {
                 QuicTraceLogVerbose(
                     PacketTxSpuriousLoss,
-                    "[%c][TX][%llu] Spurious loss detected",
+                    "[%c][TX][%" PRIu64 "] Spurious loss detected",
                     PtkConnPre(Connection),
                     (*End)->PacketNumber);
                 Connection->Stats.Send.SpuriousLostPackets++;
@@ -1388,14 +1388,14 @@ QuicLossDetectionProcessAckBlocks(
         uint32_t PacketRtt = CxPlatTimeDiff32(Packet->SentTime, TimeNow);
         QuicTraceLogVerbose(
             PacketTxAcked,
-            "[%c][TX][%llu] ACKed (%u.%03u ms)",
+            "[%c][TX][%" PRIu64 "] ACKed (%u.%03u ms)",
             PtkConnPre(Connection),
             Packet->PacketNumber,
             PacketRtt / 1000,
             PacketRtt % 1000);
         QuicTraceEvent(
             ConnPacketACKed,
-            "[conn][%p][TX][%llu] %hhu ACKed",
+            "[conn][%p][TX][%" PRIu64 "] %hhu ACKed",
             Connection,
             Packet->PacketNumber,
             QuicPacketTraceType(Packet));
@@ -1537,7 +1537,7 @@ QuicLossDetectionScheduleProbe(
     QuicTraceLogConnInfo(
         ScheduleProbe,
         Connection,
-        "probe round %lu",
+        "probe round %u",
         LossDetection->ProbeCount);
 
     //
@@ -1586,12 +1586,12 @@ QuicLossDetectionScheduleProbe(
         if (Packet->Flags.IsAckEliciting) {
             QuicTraceLogVerbose(
                 PacketTxProbeRetransmit,
-                "[%c][TX][%llu] Probe Retransmit",
+                "[%c][TX][%" PRIu64 "] Probe Retransmit",
                 PtkConnPre(Connection),
                 Packet->PacketNumber);
             QuicTraceEvent(
                 ConnPacketLost,
-                "[conn][%p][TX][%llu] %hhu Lost: %hhu",
+                "[conn][%p][TX][%" PRIu64 "] %hhu Lost: %hhu",
                 Connection,
                 Packet->PacketNumber,
                 QuicPacketTraceType(Packet),

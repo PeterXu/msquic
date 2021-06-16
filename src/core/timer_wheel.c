@@ -81,7 +81,7 @@ QuicTimerWheelInitialize(
     if (TimerWheel->Slots == NULL) {
         QuicTraceEvent(
             AllocFailure,
-            "Allocation of '%s' failed. (%llu bytes)", "timerwheel slots",
+            "Allocation of '%s' failed. (%" PRIu64 " bytes)", "timerwheel slots",
             QUIC_TIMER_WHEEL_INITIAL_SLOT_COUNT * sizeof(CXPLAT_LIST_ENTRY));
         return QUIC_STATUS_OUT_OF_MEMORY;
     }
@@ -141,7 +141,7 @@ QuicTimerWheelResize(
     if (NewSlots == NULL) {
         QuicTraceEvent(
             AllocFailure,
-            "Allocation of '%s' failed. (%llu bytes)", "timerwheel slots (realloc)",
+            "Allocation of '%s' failed. (%" PRIu64 " bytes)", "timerwheel slots (realloc)",
             NewSlotCount * sizeof(CXPLAT_LIST_ENTRY));
         return;
     }
@@ -246,7 +246,7 @@ QuicTimerWheelUpdate(
     } else {
         QuicTraceLogVerbose(
             TimerWheelNextExpiration,
-            "[time][%p] Next Expiration = {%llu, %p}.",
+            "[time][%p] Next Expiration = {%" PRIu64 ", %p}.",
             TimerWheel,
             TimerWheel->NextExpirationTime,
             TimerWheel->NextConnection);
@@ -369,7 +369,7 @@ QuicTimerWheelUpdateConnection(
             TimerWheel->NextConnection = Connection;
             QuicTraceLogVerbose(
                 TimerWheelNextExpiration,
-                "[time][%p] Next Expiration = {%llu, %p}.",
+                "[time][%p] Next Expiration = {%" PRIu64 ", %p}.",
                 TimerWheel,
                 ExpirationTime,
                 Connection);

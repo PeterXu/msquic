@@ -431,7 +431,7 @@ QuicStreamIndicateStartComplete(
     QuicTraceLogStreamVerbose(
         IndicateStartComplete,
         Stream,
-        "Indicating QUIC_STREAM_EVENT_START_COMPLETE [Status=0x%x ID=%llu Accepted=%hhu]",
+        "Indicating QUIC_STREAM_EVENT_START_COMPLETE [Status=0x%x ID=%" PRIu64 " Accepted=%hhu]",
         Status,
         Stream->ID,
         Event.START_COMPLETE.PeerAccepted);

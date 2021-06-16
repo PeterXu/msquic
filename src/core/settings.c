@@ -395,7 +395,7 @@ QuicSettingApply(
             if (Destination->DesiredVersionsList == NULL) {
                 QuicTraceEvent(
                     AllocFailure,
-                    "Allocation of '%s' failed. (%llu bytes)",
+                    "Allocation of '%s' failed. (%" PRIu64 " bytes)",
                     "Desired Versions list",
                     Source->DesiredVersionsListLength * sizeof(uint32_t));
                 return FALSE;
@@ -850,8 +850,8 @@ QuicSettingsDump(
     QuicTraceLogVerbose(SettingDumpMaxAckDelayMs,           "[sett] MaxAckDelayMs          = %u", Settings->MaxAckDelayMs);
     QuicTraceLogVerbose(SettingDumpDisconnectTimeoutMs,     "[sett] DisconnectTimeoutMs    = %u", Settings->DisconnectTimeoutMs);
     QuicTraceLogVerbose(SettingDumpKeepAliveIntervalMs,     "[sett] KeepAliveIntervalMs    = %u", Settings->KeepAliveIntervalMs);
-    QuicTraceLogVerbose(SettingDumpIdleTimeoutMs,           "[sett] IdleTimeoutMs          = %llu", Settings->IdleTimeoutMs);
-    QuicTraceLogVerbose(SettingDumpHandshakeIdleTimeoutMs,  "[sett] HandshakeIdleTimeoutMs = %llu", Settings->HandshakeIdleTimeoutMs);
+    QuicTraceLogVerbose(SettingDumpIdleTimeoutMs,           "[sett] IdleTimeoutMs          = %" PRIu64 "", Settings->IdleTimeoutMs);
+    QuicTraceLogVerbose(SettingDumpHandshakeIdleTimeoutMs,  "[sett] HandshakeIdleTimeoutMs = %" PRIu64 "", Settings->HandshakeIdleTimeoutMs);
     QuicTraceLogVerbose(SettingDumpBidiStreamCount,         "[sett] PeerBidiStreamCount    = %hu", Settings->PeerBidiStreamCount);
     QuicTraceLogVerbose(SettingDumpUnidiStreamCount,        "[sett] PeerUnidiStreamCount   = %hu", Settings->PeerUnidiStreamCount);
     QuicTraceLogVerbose(SettingDumpTlsClientMaxSendBuffer,  "[sett] TlsClientMaxSendBuffer = %u", Settings->TlsClientMaxSendBuffer);
@@ -859,11 +859,11 @@ QuicSettingsDump(
     QuicTraceLogVerbose(SettingDumpStreamRecvWindowDefault, "[sett] StreamRecvWindowDefault= %u", Settings->StreamRecvWindowDefault);
     QuicTraceLogVerbose(SettingDumpStreamRecvBufferDefault, "[sett] StreamRecvBufferDefault= %u", Settings->StreamRecvBufferDefault);
     QuicTraceLogVerbose(SettingDumpConnFlowControlWindow,   "[sett] ConnFlowControlWindow  = %u", Settings->ConnFlowControlWindow);
-    QuicTraceLogVerbose(SettingDumpMaxBytesPerKey,          "[sett] MaxBytesPerKey         = %llu", Settings->MaxBytesPerKey);
+    QuicTraceLogVerbose(SettingDumpMaxBytesPerKey,          "[sett] MaxBytesPerKey         = %" PRIu64 "", Settings->MaxBytesPerKey);
     QuicTraceLogVerbose(SettingDumpServerResumptionLevel,   "[sett] ServerResumptionLevel  = %hhu", Settings->ServerResumptionLevel);
     QuicTraceLogVerbose(SettingMinimumMtu,                  "[sett] Minimum Mtu            = %hu", Settings->MinimumMtu);
     QuicTraceLogVerbose(SettingMaximumMtu,                  "[sett] Maximum Mtu            = %hu", Settings->MaximumMtu);
-    QuicTraceLogVerbose(SettingMtuCompleteTimeout,          "[sett] Mtu complete timeout   = %llu", Settings->MtuDiscoverySearchCompleteTimeoutUs);
+    QuicTraceLogVerbose(SettingMtuCompleteTimeout,          "[sett] Mtu complete timeout   = %" PRIu64, Settings->MtuDiscoverySearchCompleteTimeoutUs);
     QuicTraceLogVerbose(SettingMtuMissingProbeCount,        "[sett] Mtu probe count        = %hhu", Settings->MtuDiscoveryMissingProbeCount);
 }
 
@@ -924,10 +924,10 @@ QuicSettingsDumpNew(
         QuicTraceLogVerbose(SettingDumpKeepAliveIntervalMs,         "[sett] KeepAliveIntervalMs    = %u", Settings->KeepAliveIntervalMs);
     }
     if (Settings->IsSet.IdleTimeoutMs) {
-        QuicTraceLogVerbose(SettingDumpIdleTimeoutMs,               "[sett] IdleTimeoutMs          = %llu", Settings->IdleTimeoutMs);
+        QuicTraceLogVerbose(SettingDumpIdleTimeoutMs,               "[sett] IdleTimeoutMs          = %" PRIu64 "", Settings->IdleTimeoutMs);
     }
     if (Settings->IsSet.HandshakeIdleTimeoutMs) {
-        QuicTraceLogVerbose(SettingDumpHandshakeIdleTimeoutMs,      "[sett] HandshakeIdleTimeoutMs = %llu", Settings->HandshakeIdleTimeoutMs);
+        QuicTraceLogVerbose(SettingDumpHandshakeIdleTimeoutMs,      "[sett] HandshakeIdleTimeoutMs = %" PRIu64 "", Settings->HandshakeIdleTimeoutMs);
     }
     if (Settings->IsSet.PeerBidiStreamCount) {
         QuicTraceLogVerbose(SettingDumpBidiStreamCount,             "[sett] PeerBidiStreamCount    = %hu", Settings->PeerBidiStreamCount);
@@ -951,7 +951,7 @@ QuicSettingsDumpNew(
         QuicTraceLogVerbose(SettingDumpConnFlowControlWindow,       "[sett] ConnFlowControlWindow  = %u", Settings->ConnFlowControlWindow);
     }
     if (Settings->IsSet.MaxBytesPerKey) {
-        QuicTraceLogVerbose(SettingDumpMaxBytesPerKey,              "[sett] MaxBytesPerKey         = %llu", Settings->MaxBytesPerKey);
+        QuicTraceLogVerbose(SettingDumpMaxBytesPerKey,              "[sett] MaxBytesPerKey         = %" PRIu64 "", Settings->MaxBytesPerKey);
     }
     if (Settings->IsSet.ServerResumptionLevel) {
         QuicTraceLogVerbose(SettingDumpServerResumptionLevel,       "[sett] ServerResumptionLevel  = %hhu", Settings->ServerResumptionLevel);
@@ -972,7 +972,7 @@ QuicSettingsDumpNew(
         QuicTraceLogVerbose(SettingDumpMaximumMtu,                  "[sett] Maximum Mtu             = %hu", Settings->MaximumMtu);
     }
     if (Settings->IsSet.MtuDiscoverySearchCompleteTimeoutUs) {
-        QuicTraceLogVerbose(SettingDumpMtuCompleteTimeout,          "[sett] Mtu complete timeout   = %llu", Settings->MtuDiscoverySearchCompleteTimeoutUs);
+        QuicTraceLogVerbose(SettingDumpMtuCompleteTimeout,          "[sett] Mtu complete timeout   = %" PRIu64, Settings->MtuDiscoverySearchCompleteTimeoutUs);
     }
     if (Settings->IsSet.MtuDiscoveryMissingProbeCount) {
         QuicTraceLogVerbose(SettingDumpMtuMissingProbeCount,        "[sett] Mtu probe count        = %hhu", Settings->MtuDiscoveryMissingProbeCount);
