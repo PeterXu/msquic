@@ -130,6 +130,7 @@ QuicOperationFree(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 BOOLEAN
 QuicOperationEnqueue(
+    _In_ QUIC_LIBRARY* Library,
     _In_ QUIC_OPERATION_QUEUE* OperQ,
     _In_ QUIC_OPERATION* Oper
     )
@@ -142,14 +143,15 @@ QuicOperationEnqueue(
     StartProcessing = CxPlatListIsEmpty(&OperQ->List) && !OperQ->ActivelyProcessing;
     CxPlatListInsertTail(&OperQ->List, &Oper->Link);
     CxPlatDispatchLockRelease(&OperQ->Lock);
-    QuicPerfCounterIncrement(QUIC_PERF_COUNTER_CONN_OPER_QUEUED);
-    QuicPerfCounterIncrement(QUIC_PERF_COUNTER_CONN_OPER_QUEUE_DEPTH);
+    QuicPerfCounterIncrement(Library, QUIC_PERF_COUNTER_CONN_OPER_QUEUED);
+    QuicPerfCounterIncrement(Library, QUIC_PERF_COUNTER_CONN_OPER_QUEUE_DEPTH);
     return StartProcessing;
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 BOOLEAN
 QuicOperationEnqueueFront(
+    _In_ QUIC_LIBRARY* Library,
     _In_ QUIC_OPERATION_QUEUE* OperQ,
     _In_ QUIC_OPERATION* Oper
     )
@@ -162,14 +164,15 @@ QuicOperationEnqueueFront(
     StartProcessing = CxPlatListIsEmpty(&OperQ->List) && !OperQ->ActivelyProcessing;
     CxPlatListInsertHead(&OperQ->List, &Oper->Link);
     CxPlatDispatchLockRelease(&OperQ->Lock);
-    QuicPerfCounterIncrement(QUIC_PERF_COUNTER_CONN_OPER_QUEUED);
-    QuicPerfCounterIncrement(QUIC_PERF_COUNTER_CONN_OPER_QUEUE_DEPTH);
+    QuicPerfCounterIncrement(Library, QUIC_PERF_COUNTER_CONN_OPER_QUEUED);
+    QuicPerfCounterIncrement(Library, QUIC_PERF_COUNTER_CONN_OPER_QUEUE_DEPTH);
     return StartProcessing;
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 QUIC_OPERATION*
 QuicOperationDequeue(
+    _In_ QUIC_LIBRARY* Library,
     _In_ QUIC_OPERATION_QUEUE* OperQ
     )
 {
@@ -190,7 +193,7 @@ QuicOperationDequeue(
     CxPlatDispatchLockRelease(&OperQ->Lock);
 
     if (Oper != NULL) {
-        QuicPerfCounterDecrement(QUIC_PERF_COUNTER_CONN_OPER_QUEUE_DEPTH);
+        QuicPerfCounterDecrement(Library, QUIC_PERF_COUNTER_CONN_OPER_QUEUE_DEPTH);
     }
     return Oper;
 }
@@ -202,6 +205,7 @@ QuicOperationQueueClear(
     _In_ QUIC_OPERATION_QUEUE* OperQ
     )
 {
+    QUIC_LIBRARY* Library = Worker->Library;
     CXPLAT_LIST_ENTRY OldList;
     CxPlatListInitializeHead(&OldList);
 
@@ -240,5 +244,5 @@ QuicOperationQueueClear(
             }
         }
     }
-    QuicPerfCounterAdd(QUIC_PERF_COUNTER_CONN_OPER_QUEUE_DEPTH, OperationsDequeued);
+    QuicPerfCounterAdd(Library, QUIC_PERF_COUNTER_CONN_OPER_QUEUE_DEPTH, OperationsDequeued);
 }

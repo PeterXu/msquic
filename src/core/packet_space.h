@@ -135,6 +135,7 @@ QuicPacketSpaceInitialize(
 _IRQL_requires_max_(PASSIVE_LEVEL)
 void
 QuicPacketSpaceUninitialize(
+    _In_ QUIC_LIBRARY* Library,
     _In_ QUIC_PACKET_SPACE* Packets
     );
 

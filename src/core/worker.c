@@ -24,6 +24,8 @@ Abstract:
 #include "worker.c.clog.h"
 #endif
 
+struct QUIC_LIBRARY;
+
 //
 // Thread callback for processing the work queued for the worker.
 //
@@ -180,6 +182,7 @@ QuicWorkerQueueConnection(
 {
     CXPLAT_DBG_ASSERT(Connection->Worker != NULL);
     BOOLEAN ConnectionQueued = FALSE;
+    QUIC_LIBRARY* Library = Worker->Library;
 
     CxPlatDispatchLockAcquire(&Worker->Lock);
 
@@ -204,7 +207,7 @@ QuicWorkerQueueConnection(
     CxPlatDispatchLockRelease(&Worker->Lock);
 
     if (ConnectionQueued) {
-        QuicPerfCounterIncrement(QUIC_PERF_COUNTER_CONN_QUEUE_DEPTH);
+        QuicPerfCounterIncrement(Library, QUIC_PERF_COUNTER_CONN_QUEUE_DEPTH);
     }
 
     if (WakeWorkerThread) {
@@ -250,18 +253,19 @@ QuicWorkerQueueOperation(
     _In_ QUIC_OPERATION* Operation
     )
 {
+    QUIC_LIBRARY* Library = Worker->Library;
     CxPlatDispatchLockAcquire(&Worker->Lock);
 
     BOOLEAN WakeWorkerThread;
-    if (Worker->OperationCount < MsQuicLib.Settings.MaxStatelessOperations &&
-        QuicLibraryTryAddRefBinding(Operation->STATELESS.Context->Binding)) {
+    if (Worker->OperationCount < Library->Settings.MaxStatelessOperations &&
+        QuicLibraryTryAddRefBinding(Library, Operation->STATELESS.Context->Binding)) {
         Operation->STATELESS.Context->HasBindingRef = TRUE;
         WakeWorkerThread = QuicWorkerIsIdle(Worker);
         CxPlatListInsertTail(&Worker->Operations, &Operation->Link);
         Worker->OperationCount++;
         Operation = NULL;
-        QuicPerfCounterIncrement(QUIC_PERF_COUNTER_WORK_OPER_QUEUE_DEPTH);
-        QuicPerfCounterIncrement(QUIC_PERF_COUNTER_WORK_OPER_QUEUED);
+        QuicPerfCounterIncrement(Library, QUIC_PERF_COUNTER_WORK_OPER_QUEUE_DEPTH);
+        QuicPerfCounterIncrement(Library, QUIC_PERF_COUNTER_WORK_OPER_QUEUED);
     } else {
         WakeWorkerThread = FALSE;
         Worker->DroppedOperationCount++;
@@ -350,7 +354,7 @@ QuicWorkerGetNextConnection(
             CXPLAT_DBG_ASSERT(Connection->HasQueuedWork);
             Connection->HasQueuedWork = FALSE;
             Connection->WorkerProcessing = TRUE;
-            QuicPerfCounterDecrement(QUIC_PERF_COUNTER_CONN_QUEUE_DEPTH);
+            QuicPerfCounterDecrement(Worker->Library, QUIC_PERF_COUNTER_CONN_QUEUE_DEPTH);
         }
 
         CxPlatDispatchLockRelease(&Worker->Lock);
@@ -382,7 +386,7 @@ QuicWorkerGetNextOperation(
             Operation->Link.Flink = NULL;
 #endif
             Worker->OperationCount--;
-            QuicPerfCounterDecrement(QUIC_PERF_COUNTER_WORK_OPER_QUEUE_DEPTH);
+            QuicPerfCounterDecrement(Worker->Library, QUIC_PERF_COUNTER_WORK_OPER_QUEUE_DEPTH);
         }
 
         CxPlatDispatchLockRelease(&Worker->Lock);
@@ -594,6 +598,7 @@ QuicWorkerLoop(
         QuicWorkerProcessTimers(Worker, ThreadID);
     }
 
+    QUIC_LIBRARY* Library = Worker->Library;
     if (!Worker->Enabled) {
         //
         // Because the registration layer only waits for the rundown to complete,
@@ -621,7 +626,7 @@ QuicWorkerLoop(
             QuicConnRelease(Connection, QUIC_CONN_REF_WORKER);
             --Dequeue;
         }
-        QuicPerfCounterAdd(QUIC_PERF_COUNTER_CONN_QUEUE_DEPTH, Dequeue);
+        QuicPerfCounterAdd(Library, QUIC_PERF_COUNTER_CONN_QUEUE_DEPTH, Dequeue);
 
         Dequeue = 0;
         while (!CxPlatListIsEmpty(&Worker->Operations)) {
@@ -634,7 +639,7 @@ QuicWorkerLoop(
             QuicOperationFree(Worker, Operation);
             --Dequeue;
         }
-        QuicPerfCounterAdd(QUIC_PERF_COUNTER_WORK_OPER_QUEUE_DEPTH, Dequeue);
+        QuicPerfCounterAdd(Library, QUIC_PERF_COUNTER_WORK_OPER_QUEUE_DEPTH, Dequeue);
 
         return QUIC_WORKER_LOOP_EXIT;
     }
@@ -650,7 +655,7 @@ QuicWorkerLoop(
             Operation->Type,
             Operation->STATELESS.Context);
         QuicOperationFree(Worker, Operation);
-        QuicPerfCounterIncrement(QUIC_PERF_COUNTER_WORK_OPER_COMPLETED);
+        QuicPerfCounterIncrement(Library, QUIC_PERF_COUNTER_WORK_OPER_COMPLETED);
     }
 
     uint64_t TimeNow = CxPlatTimeUs64();
@@ -659,7 +664,7 @@ QuicWorkerLoop(
     // Opportunistically try to snap-shot performance counters and do
     // some validation.
     //
-    QuicPerfCounterTrySnapShot(TimeNow);
+    QuicPerfCounterTrySnapShot(Library, TimeNow);
 
     //
     // Get the delay until the next timer expires. Check to see if any timers
@@ -750,6 +755,7 @@ CXPLAT_THREAD_CALLBACK(QuicWorkerThread, Context)
 _IRQL_requires_max_(PASSIVE_LEVEL)
 QUIC_STATUS
 QuicWorkerPoolInitialize(
+    _In_ QUIC_LIBRARY* Library,
     _In_opt_ const void* Owner,
     _In_ uint16_t ThreadFlags,
     _In_ uint16_t WorkerCount,
@@ -780,6 +786,7 @@ QuicWorkerPoolInitialize(
     //
 
     for (uint16_t i = 0; i < WorkerCount; i++) {
+        WorkerPool->Workers[i].Library = Library;
         Status = QuicWorkerInitialize(Owner, ThreadFlags, i, &WorkerPool->Workers[i]);
         if (QUIC_FAILED(Status)) {
             for (uint16_t j = 0; j < i; j++) {
