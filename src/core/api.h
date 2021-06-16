@@ -75,6 +75,15 @@ MsQuicListenerOpen(
     );
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
+QUIC_STATUS
+QUIC_API
+MsQuicListenerExternalInput(
+    _In_ _Pre_defensive_ HQUIC Handle,
+    _In_ const char *Buffer,
+    _In_ size_t Length
+    );
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
 void
 QUIC_API
 MsQuicListenerClose(
@@ -91,6 +100,18 @@ MsQuicListenerStart(
         const QUIC_BUFFER* const AlpnBuffers,
     _In_range_(>, 0) uint32_t AlpnBufferCount,
     _In_opt_ const QUIC_ADDR* LocalAddress
+    );
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+QUIC_STATUS
+QUIC_API
+MsQuicListenerStartEx(
+    _In_ _Pre_defensive_ HQUIC Handle,
+    _In_reads_(AlpnBufferCount) _Pre_defensive_
+        const QUIC_BUFFER* const AlpnBuffers,
+    _In_range_(>, 0) uint32_t AlpnBufferCount,
+    _In_opt_ const QUIC_ADDR* LocalAddress,
+    _In_ _Pre_defensive_ QUIC_EXTERNAL_OUTPUT_CALLBACK_HANDLER OutputHandler
     );
 
 _IRQL_requires_max_(PASSIVE_LEVEL)

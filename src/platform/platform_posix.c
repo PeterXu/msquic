@@ -410,7 +410,7 @@ CxPlatProcMaxCount(
     void
     )
 {
-#if defined(CX_PLATFORM_DARWIN)
+#if defined(CX_PLATFORM_DARWIN) || defined(CX_PLATFORM_LINUX)
     //
     // arm64 macOS has no way to get the current proc, so treat as single core.
     // Intel macOS can return incorrect values for CPUID, so treat as single core.
@@ -426,7 +426,7 @@ CxPlatProcActiveCount(
     void
     )
 {
-#if defined(CX_PLATFORM_DARWIN)
+#if defined(CX_PLATFORM_DARWIN) || defined(CX_PLATFORM_LINUX)
     //
     // arm64 macOS has no way to get the current proc, so treat as single core.
     // Intel macOS can return incorrect values for CPUID, so treat as single core.
@@ -443,7 +443,8 @@ CxPlatProcCurrentNumber(
     )
 {
 #if defined(CX_PLATFORM_LINUX)
-    return (uint32_t)sched_getcpu();
+    return 0;
+    //return (uint32_t)sched_getcpu();
 #elif defined(CX_PLATFORM_DARWIN)
     //
     // arm64 macOS has no way to get the current proc, so treat as single core.

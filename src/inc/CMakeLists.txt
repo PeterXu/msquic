@@ -36,7 +36,7 @@ endif()
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
-target_link_libraries(inc INTERFACE Threads::Threads ${CMAKE_DL_LIBS} ${ATOMIC})
+target_link_libraries(inc INTERFACE Threads::Threads ${CMAKE_DL_LIBS})
 
 if(WIN32)
     target_link_libraries(inc INTERFACE ws2_32 schannel ntdll bcrypt ncrypt crypt32 iphlpapi advapi32)
