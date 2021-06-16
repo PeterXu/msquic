@@ -1716,6 +1716,85 @@ QuicBindingReceive(
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
+_Function_class_(CXPLAT_DATAPATH_EXTERNAL_OUTPUT_CALLBACK)
+BOOLEAN
+QuicBindingExternalOutput(
+    _In_ CXPLAT_SOCKET* Socket,
+    _In_ void* RecvCallbackContext,
+    _In_ QUIC_BUFFER* Buffers,
+    _In_ uint32_t BufferCount
+    )
+{
+    UNREFERENCED_PARAMETER(Socket);
+    CXPLAT_DBG_ASSERT(RecvCallbackContext != NULL);
+    QUIC_BINDING* Binding = (QUIC_BINDING*)RecvCallbackContext;
+    if (Binding->OutputCallbackHandler != NULL) {
+        for (uint32_t i=0; i < BufferCount; i += 1) {
+            QUIC_BUFFER *Buffer = &Buffers[i];
+            Binding->OutputCallbackHandler(NULL, Binding->ClientContext, Buffer->Buffer, Buffer->Length);
+        }
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+QUIC_STATUS
+QUIC_API
+MsQuicListenerExternalInput(
+    _In_ _Pre_defensive_ HQUIC Handle,
+    _In_ const char *Buffer,
+    _In_ size_t Length
+    )
+{
+    QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
+    QUIC_LISTENER* Listener = NULL;
+    QUIC_BINDING *Binding = NULL;
+
+    QuicTraceEvent(
+        ApiEnter,
+        "[ api] Enter %u (%p).",
+        QUIC_TRACE_API_EXTERNAL_INPUT,
+        Handle);
+
+    if (Handle == NULL ||
+        Handle->Type != QUIC_HANDLE_TYPE_LISTENER) {
+        Status = QUIC_STATUS_INVALID_PARAMETER;
+        goto Exit;
+    }
+
+    Listener = (QUIC_LISTENER*)Handle;
+
+    if (!Listener->Binding) {
+        Status = QUIC_STATUS_INVALID_STATE;
+        goto Exit;
+    }
+
+    Binding = Listener->Binding;
+
+    if (!Binding->OutputCallbackHandler) {
+        Status = QUIC_STATUS_INVALID_STATE;
+        goto Exit;
+    }
+
+    if (!Binding->Socket) {
+        Status = QUIC_STATUS_INVALID_STATE;
+        goto Exit;
+    }
+
+    Status = CxPlatSocketDeliverReceivePacket(Binding->Socket, Buffer, Length);
+Exit:
+
+    QuicTraceEvent(
+        ApiExitStatus,
+        "[ api] Exit %u",
+        Status);
+
+    return Status;
+}
+
+_IRQL_requires_max_(DISPATCH_LEVEL)
 _Function_class_(CXPLAT_DATAPATH_UNREACHABLE_CALLBACK)
 void
 QuicBindingUnreachable(

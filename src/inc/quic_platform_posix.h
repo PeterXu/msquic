@@ -64,7 +64,9 @@ extern "C" {
 // Generic stuff.
 //
 
+#ifndef INVALID_SOCKET
 #define INVALID_SOCKET ((int)(-1))
+#endif
 
 #define SOCKET_ERROR (-1)
 

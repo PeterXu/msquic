@@ -274,6 +274,19 @@ void
 
 typedef CXPLAT_DATAPATH_RECEIVE_CALLBACK *CXPLAT_DATAPATH_RECEIVE_CALLBACK_HANDLER;
 
+typedef
+_IRQL_requires_max_(DISPATCH_LEVEL)
+_Function_class_(CXPLAT_DATAPATH_EXTERNAL_OUTPUT_CALLBACK)
+BOOLEAN
+(CXPLAT_DATAPATH_EXTERNAL_OUTPUT_CALLBACK)(
+    _In_ CXPLAT_SOCKET* Socket,
+    _In_ void* RecvCallbackContext,
+    _In_ QUIC_BUFFER* Buffers,
+    _In_ uint32_t BufferCount
+    );
+
+typedef CXPLAT_DATAPATH_EXTERNAL_OUTPUT_CALLBACK *CXPLAT_DATAPATH_EXTERNAL_OUTPUT_CALLBACK_HANDLER;
+
 //
 // Function pointer type for datapath port unreachable callbacks.
 //
@@ -294,7 +307,9 @@ typedef CXPLAT_DATAPATH_UNREACHABLE_CALLBACK *CXPLAT_DATAPATH_UNREACHABLE_CALLBA
 //
 typedef struct CXPLAT_UDP_DATAPATH_CALLBACKS {
 
+	BOOLEAN ExternalSocket;
     CXPLAT_DATAPATH_RECEIVE_CALLBACK_HANDLER Receive;
+    CXPLAT_DATAPATH_EXTERNAL_OUTPUT_CALLBACK_HANDLER ExternalOutput;
     CXPLAT_DATAPATH_UNREACHABLE_CALLBACK_HANDLER Unreachable;
 
 } CXPLAT_UDP_DATAPATH_CALLBACKS;
@@ -437,6 +452,7 @@ CxPlatDataPathGetGatewayAddresses(
 #define CXPLAT_SOCKET_FLAG_PCP      0x00000001  // Socket is used for internal PCP support
 #define CXPLAT_SOCKET_FLAG_SHARE    0x00000002  // Forces sharing of the address and port
 #define CXPLAT_SOCKET_SERVER_OWNED  0x00000004  // Indicates socket is a listener socket
+#define CXPLAT_SOCKET_FLAG_EXTERNAL      0x00000008  // Socket is from external(data-driven)
 
 typedef struct CXPLAT_UDP_CONFIG {
     const QUIC_ADDR* LocalAddress;      // optional
@@ -607,6 +623,14 @@ CxPlatSocketSend(
     _In_ const QUIC_ADDR* RemoteAddress,
     _In_ CXPLAT_SEND_DATA* SendData,
     _In_ uint16_t PartitionId
+    );
+
+_IRQL_requires_max_(DISPATCH_LEVEL)
+QUIC_STATUS
+CxPlatSocketDeliverReceivePacket(
+    _In_ CXPLAT_SOCKET* BindingSocket,
+    _In_ const char *Buffer,
+    _In_ uint32_t Length
     );
 
 //

@@ -829,6 +829,19 @@ QUIC_STATUS
 
 typedef QUIC_LISTENER_CALLBACK *QUIC_LISTENER_CALLBACK_HANDLER;
 
+typedef
+_IRQL_requires_max_(PASSIVE_LEVEL)
+_Function_class_(QUIC_EXTERNAL_OUTPUT_CALLBACK)
+QUIC_STATUS
+(QUIC_API QUIC_EXTERNAL_OUTPUT_CALLBACK)(
+    _In_ HQUIC Listener,
+    _In_opt_ void* Context,
+    _In_ void* Buffer,
+    _In_ size_t Length
+    );
+
+typedef QUIC_EXTERNAL_OUTPUT_CALLBACK *QUIC_EXTERNAL_OUTPUT_CALLBACK_HANDLER;
+
 //
 // Opens a new listener.
 //
@@ -867,6 +880,27 @@ QUIC_STATUS
         const QUIC_BUFFER* const AlpnBuffers,
     _In_range_(>, 0) uint32_t AlpnBufferCount,
     _In_opt_ const QUIC_ADDR* LocalAddress
+    );
+
+typedef
+_IRQL_requires_max_(PASSIVE_LEVEL)
+QUIC_STATUS
+(QUIC_API * QUIC_LISTENER_START_EX_FN)(
+    _In_ _Pre_defensive_ HQUIC Listener,
+    _In_reads_(AlpnBufferCount) _Pre_defensive_
+        const QUIC_BUFFER* const AlpnBuffers,
+    _In_range_(>, 0) uint32_t AlpnBufferCount,
+    _In_opt_ const QUIC_ADDR* LocalAddress,
+    _In_ _Pre_defensive_ QUIC_EXTERNAL_OUTPUT_CALLBACK_HANDLER OutputHandler
+    );
+
+typedef
+_IRQL_requires_max_(PASSIVE_LEVEL)
+QUIC_STATUS
+(QUIC_API * QUIC_LISTENER_EXTERNAL_INPUT_FN)(
+    _In_ _Pre_defensive_ HQUIC Handle,
+    _In_ const char *Buffer,
+    _In_ size_t Length
     );
 
 //
@@ -1268,7 +1302,9 @@ typedef struct QUIC_API_TABLE {
     QUIC_LISTENER_OPEN_FN               ListenerOpen;
     QUIC_LISTENER_CLOSE_FN              ListenerClose;
     QUIC_LISTENER_START_FN              ListenerStart;
+    QUIC_LISTENER_START_EX_FN           ListenerStartEx;
     QUIC_LISTENER_STOP_FN               ListenerStop;
+    QUIC_LISTENER_EXTERNAL_INPUT_FN     ListenerExternalInput;
 
     QUIC_CONNECTION_OPEN_FN             ConnectionOpen;
     QUIC_CONNECTION_CLOSE_FN            ConnectionClose;

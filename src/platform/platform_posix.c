@@ -467,6 +467,7 @@ CxPlatProcCurrentNumber(
     )
 {
 #if defined(CX_PLATFORM_LINUX)
+    return 0; // TODO for data-driven
     return (uint32_t)sched_getcpu() % CxPlatProcessorCount;
 #elif defined(CX_PLATFORM_DARWIN)
     //

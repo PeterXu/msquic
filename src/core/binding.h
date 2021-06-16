@@ -186,6 +186,9 @@ typedef struct QUIC_BINDING {
     //
     BOOLEAN Connected : 1;
 
+    void *ClientContext;
+    QUIC_EXTERNAL_OUTPUT_CALLBACK_HANDLER OutputCallbackHandler;
+
     //
     // Number of (connection and listener) references to the binding.
     //
@@ -246,6 +249,7 @@ typedef struct QUIC_BINDING {
 // Global callbacks for all QUIC UDP bindings.
 //
 CXPLAT_DATAPATH_RECEIVE_CALLBACK QuicBindingReceive;
+CXPLAT_DATAPATH_EXTERNAL_OUTPUT_CALLBACK QuicBindingExternalOutput;
 CXPLAT_DATAPATH_UNREACHABLE_CALLBACK QuicBindingUnreachable;
 
 //

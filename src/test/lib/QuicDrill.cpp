@@ -132,7 +132,9 @@ struct DrillSender {
         )
     {
         const CXPLAT_UDP_DATAPATH_CALLBACKS DatapathCallbacks = {
+            FALSE,
             DrillUdpRecvCallback,
+            nullptr,
             DrillUdpUnreachCallback,
         };
         QUIC_STATUS Status =

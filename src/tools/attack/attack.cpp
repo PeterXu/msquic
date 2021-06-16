@@ -381,7 +381,9 @@ main(
 {
     int ErrorCode = -1;
     const CXPLAT_UDP_DATAPATH_CALLBACKS DatapathCallbacks = {
+        FALSE,
         UdpRecvCallback,
+        NULL,
         UdpUnreachCallback,
     };
 
