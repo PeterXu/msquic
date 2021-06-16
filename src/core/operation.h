@@ -328,6 +328,7 @@ QuicOperationFree(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 BOOLEAN
 QuicOperationEnqueue(
+    _In_ QUIC_LIBRARY* Library,
     _In_ QUIC_OPERATION_QUEUE* OperQ,
     _In_ QUIC_OPERATION* Oper
     );
@@ -339,6 +340,7 @@ QuicOperationEnqueue(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 BOOLEAN
 QuicOperationEnqueueFront(
+    _In_ QUIC_LIBRARY* Library,
     _In_ QUIC_OPERATION_QUEUE* OperQ,
     _In_ QUIC_OPERATION* Oper
     );
@@ -349,6 +351,7 @@ QuicOperationEnqueueFront(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 QUIC_OPERATION*
 QuicOperationDequeue(
+    _In_ QUIC_LIBRARY* Library,
     _In_ QUIC_OPERATION_QUEUE* OperQ
     );
 

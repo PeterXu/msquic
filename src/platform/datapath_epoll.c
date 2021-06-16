@@ -342,6 +342,7 @@ typedef struct CXPLAT_DATAPATH_PROC_CONTEXT {
 //
 
 typedef struct CXPLAT_DATAPATH {
+    BOOLEAN ExternalSocket;
 
     //
     // A reference rundown on the datapath binding.
@@ -586,6 +587,7 @@ CxPlatProcessorContextUninitialize(
     _In_ CXPLAT_DATAPATH_PROC_CONTEXT* ProcContext
     )
 {
+    if (ProcContext->EpollFd != INVALID_SOCKET) {
     const eventfd_t Value = 1;
     eventfd_write(ProcContext->EventFd, Value);
     CxPlatThreadWait(&ProcContext->EpollWaitThread);
@@ -594,6 +596,7 @@ CxPlatProcessorContextUninitialize(
     epoll_ctl(ProcContext->EpollFd, EPOLL_CTL_DEL, ProcContext->EventFd, NULL);
     close(ProcContext->EventFd);
     close(ProcContext->EpollFd);
+    }
 
     CxPlatPoolUninitialize(&ProcContext->RecvBlockPool);
     CxPlatPoolUninitialize(&ProcContext->LargeSendBufferPool);
@@ -613,10 +616,12 @@ CxPlatDataPathInitialize(
     if (NewDataPath == NULL) {
         return QUIC_STATUS_INVALID_PARAMETER;
     }
+    BOOLEAN ExternalSocket = FALSE;
     if (UdpCallbacks != NULL) {
         if (UdpCallbacks->Receive == NULL || UdpCallbacks->Unreachable == NULL) {
             return QUIC_STATUS_INVALID_PARAMETER;
         }
+        ExternalSocket = UdpCallbacks->ExternalSocket;
     }
 
     QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
@@ -644,6 +649,7 @@ CxPlatDataPathInitialize(
     Datapath->ProcCount = CxPlatProcMaxCount();
     Datapath->MaxSendBatchSize = CXPLAT_MAX_BATCH_SEND;
     CxPlatRundownInitialize(&Datapath->BindingsRundown);
+    Datapath->ExternalSocket = ExternalSocket;
 
 #ifdef UDP_SEGMENT
     Status = CxPlatDataPathQuerySockoptSupport(Datapath);
@@ -918,7 +924,7 @@ CxPlatSocketConfigureRss(
 QUIC_STATUS
 CxPlatSocketContextInitialize(
     _Inout_ CXPLAT_SOCKET_CONTEXT* SocketContext,
-    _In_ BOOLEAN External,
+    _In_ BOOLEAN ExternalSocket,
     _In_ const QUIC_ADDR* LocalAddress,
     _In_ const QUIC_ADDR* RemoteAddress
     )
@@ -969,7 +975,7 @@ CxPlatSocketContextInitialize(
         goto Exit;
     }
 
-    if (External) {
+    if (ExternalSocket) {
         SocketContext->SocketFd = INVALID_SOCKET;
         goto Exit;
     }
@@ -1307,12 +1313,17 @@ CxPlatSocketContextUninitialize(
     _In_ CXPLAT_SOCKET_CONTEXT* SocketContext
     )
 {
-    //int EpollRes =
+    if (SocketContext->ProcContext->EpollFd != INVALID_SOCKET &&
+        SocketContext->SocketFd != INVALID_SOCKET) {
+    int EpollRes =
         epoll_ctl(SocketContext->ProcContext->EpollFd, EPOLL_CTL_DEL, SocketContext->SocketFd, NULL);
-    //CXPLAT_FRE_ASSERT(EpollRes == 0);
+    CXPLAT_FRE_ASSERT(EpollRes == 0);
+    }
 
+    if (SocketContext->CleanupFd != INVALID_SOCKET) {
     const eventfd_t Value = 1;
     eventfd_write(SocketContext->CleanupFd, Value);
+    }
 }
 
 void
@@ -1335,6 +1346,7 @@ CxPlatSocketContextUninitializeComplete(
     }
 
     int EpollFd = SocketContext->ProcContext->EpollFd;
+    if (EpollFd != INVALID_SOCKET) {
     if (SocketContext->SocketFd != INVALID_SOCKET) {
     epoll_ctl(EpollFd, EPOLL_CTL_DEL, SocketContext->SocketFd, NULL);
     }
@@ -1342,6 +1354,7 @@ CxPlatSocketContextUninitializeComplete(
     close(SocketContext->CleanupFd);
     if (SocketContext->SocketFd != INVALID_SOCKET) {
     close(SocketContext->SocketFd);
+    }
     }
 
     CxPlatRundownRelease(&SocketContext->Binding->Rundown);
@@ -1829,7 +1842,7 @@ CxPlatSocketCreateUdp(
     _Out_ CXPLAT_SOCKET** NewBinding
     )
 {
-    BOOLEAN External = InternalFlags & CXPLAT_SOCKET_FLAG_NOP;
+    BOOLEAN ExternalSocket = Datapath->ExternalSocket || (InternalFlags & CXPLAT_SOCKET_FLAG_NOP);
     QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
     BOOLEAN IsServerSocket = RemoteAddress == NULL;
 
@@ -1853,6 +1866,9 @@ CxPlatSocketCreateUdp(
             BindingLength);
         goto Exit;
     }
+
+    // Update
+    Datapath->ExternalSocket = ExternalSocket;
 
     QuicTraceEvent(
         DatapathCreated,
@@ -1894,7 +1910,7 @@ CxPlatSocketCreateUdp(
         Status =
             CxPlatSocketContextInitialize(
                 &Binding->SocketContexts[i],
-                External,
+                ExternalSocket,
                 LocalAddress,
                 RemoteAddress);
         if (QUIC_FAILED(Status)) {
@@ -1927,7 +1943,7 @@ CxPlatSocketCreateUdp(
     //
     *NewBinding = Binding;
 
-    if (!External) {
+    if (!ExternalSocket) {
     for (uint32_t i = 0; i < SocketCount; i++) {
         Status =
             CxPlatSocketContextStartReceive(
@@ -2495,18 +2511,20 @@ CxPlatSocketSendInternal(
         }
     }
 
-    if (Socket->Datapath->UdpHandlers.ExternalOutput != NULL) {
-        size_t Start = SendData->SentMessagesCount;
-        BOOLEAN Processed = Socket->Datapath->UdpHandlers.ExternalOutput(
-            Socket,
-            Socket->ClientContext,
-            &SendData->Buffers[Start],
-            SendData->BufferCount - Start
-            );
-        if (Processed) {
-            SendData->SentMessagesCount += SendData->TotalSize;
-            goto Exit;
+    if (Socket->Datapath->ExternalSocket) {
+        if (Socket->Datapath->UdpHandlers.ExternalOutput != NULL) {
+            size_t Start = SendData->SentMessagesCount;
+            BOOLEAN Processed = Socket->Datapath->UdpHandlers.ExternalOutput(
+                Socket,
+                Socket->ClientContext,
+                &SendData->Buffers[Start],
+                SendData->BufferCount - Start
+                );
+            if (Processed) {
+                SendData->SentMessagesCount += SendData->TotalSize;
+            }
         }
+        goto Exit;
     }
 
     //

@@ -31,6 +31,7 @@ QuicStreamInitialize(
     uint8_t* PreallocatedRecvBuffer = NULL;
     uint32_t InitialRecvBufferLength;
     QUIC_WORKER* Worker = Connection->Worker;
+    QUIC_LIBRARY* Library = Connection->Library;
 
     Stream = CxPlatPoolAlloc(&Worker->StreamPool);
     if (Stream == NULL) {
@@ -44,8 +45,9 @@ QuicStreamInitialize(
     CxPlatListInsertTail(&Connection->Streams.AllStreams, &Stream->AllStreamsLink);
     CxPlatDispatchLockRelease(&Connection->Streams.AllStreamsLock);
 #endif
-    QuicPerfCounterIncrement(QUIC_PERF_COUNTER_STRM_ACTIVE);
+    QuicPerfCounterIncrement(Library, QUIC_PERF_COUNTER_STRM_ACTIVE);
 
+    Stream->Library = Library;
     Stream->Type = QUIC_HANDLE_TYPE_STREAM;
     Stream->Connection = Connection;
     Stream->ID = UINT64_MAX;
@@ -141,7 +143,7 @@ Exit:
         CxPlatListEntryRemove(&Stream->AllStreamsLink);
         CxPlatDispatchLockRelease(&Connection->Streams.AllStreamsLock);
 #endif
-        QuicPerfCounterDecrement(QUIC_PERF_COUNTER_STRM_ACTIVE);
+        QuicPerfCounterDecrement(Library, QUIC_PERF_COUNTER_STRM_ACTIVE);
         CxPlatDispatchLockUninitialize(&Stream->ApiSendRequestLock);
         Stream->Flags.Freed = TRUE;
         CxPlatPoolFree(&Worker->StreamPool, Stream);
@@ -159,6 +161,7 @@ QuicStreamFree(
     _In_ __drv_freesMem(Mem) QUIC_STREAM* Stream
     )
 {
+    QUIC_LIBRARY* Library = Stream->Library;
     BOOLEAN WasStarted = Stream->Flags.Started;
     QUIC_CONNECTION* Connection = Stream->Connection;
     QUIC_WORKER* Worker = Connection->Worker;
@@ -179,7 +182,7 @@ QuicStreamFree(
     CxPlatListEntryRemove(&Stream->AllStreamsLink);
     CxPlatDispatchLockRelease(&Connection->Streams.AllStreamsLock);
 #endif
-    QuicPerfCounterDecrement(QUIC_PERF_COUNTER_STRM_ACTIVE);
+    QuicPerfCounterDecrement(Library, QUIC_PERF_COUNTER_STRM_ACTIVE);
 
     QuicRecvBufferUninitialize(&Stream->RecvBuffer);
     QuicRangeUninitialize(&Stream->SparseAckRanges);

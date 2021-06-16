@@ -664,6 +664,8 @@ QuicSendWriteFrames(
 
             BOOLEAN HasMoreCidsToSend = FALSE;
             BOOLEAN MaxFrameLimitHit = FALSE;
+            QUIC_LIBRARY* Library = Connection->Library;
+            (void)Library;
             for (CXPLAT_SLIST_ENTRY* Entry = Connection->SourceCids.Next;
                     Entry != NULL;
                     Entry = Entry->Next) {
@@ -693,7 +695,7 @@ QuicSendWriteFrames(
                     Frame.Buffer,
                     SourceCid->CID.Data,
                     SourceCid->CID.Length);
-                CXPLAT_DBG_ASSERT(SourceCid->CID.Length == MsQuicLib.CidTotalLength);
+                CXPLAT_DBG_ASSERT(SourceCid->CID.Length == Library->CidTotalLength);
                 QuicBindingGenerateStatelessResetToken(
                     Builder->Path->Binding,
                     SourceCid->CID.Data,

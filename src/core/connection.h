@@ -607,7 +607,7 @@ typedef struct QUIC_SERIALIZED_RESUMPTION_STATE {
     if (Connection->State.IsVerifying) { CXPLAT_FRE_ASSERT(Expr); }
 #elif defined(CxPlatVerifierEnabled)
 #define QUIC_CONN_VERIFY(Connection, Expr) \
-    if (MsQuicLib.IsVerifying) { CXPLAT_FRE_ASSERT(Expr); }
+    if (Connection->Library->IsVerifying) { CXPLAT_FRE_ASSERT(Expr); }
 #else
 #define QUIC_CONN_VERIFY(Connection, Expr)
 #endif

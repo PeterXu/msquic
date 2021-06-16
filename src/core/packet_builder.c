@@ -638,6 +638,7 @@ QuicPacketBuilderFinalize(
     )
 {
     QUIC_CONNECTION* Connection = Builder->Connection;
+    QUIC_LIBRARY* Library = Connection->Library;
     BOOLEAN FinalQuicPacket = FALSE;
 
     QuicPacketBuilderValidate(Builder, FALSE);
@@ -679,7 +680,7 @@ QuicPacketBuilderFinalize(
 
         FinalQuicPacket = TRUE;
 
-        if (!FlushBatchedDatagrams && CxPlatDataPathIsPaddingPreferred(MsQuicLib.Datapath)) {
+        if (!FlushBatchedDatagrams && CxPlatDataPathIsPaddingPreferred(Library->Datapath)) {
             //
             // When buffering multiple datagrams in a single contiguous buffer
             // (at the datapath layer), all but the last datagram needs to be

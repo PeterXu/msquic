@@ -490,6 +490,7 @@ QuicStreamSendFlush(
     Stream->ApiSendRequests = NULL;
     CxPlatDispatchLockRelease(&Stream->ApiSendRequestLock);
     int64_t TotalBytesSent = 0;
+    QUIC_LIBRARY* Library = Stream->Library;
 
     BOOLEAN Start = FALSE;
 
@@ -599,7 +600,7 @@ QuicStreamSendFlush(
         (void)QuicStreamStart(Stream, QUIC_STREAM_START_FLAG_ASYNC, FALSE);
     }
 
-    QuicPerfCounterAdd(QUIC_PERF_COUNTER_APP_SEND_BYTES, TotalBytesSent);
+    QuicPerfCounterAdd(Library, QUIC_PERF_COUNTER_APP_SEND_BYTES, TotalBytesSent);
 }
 
 _IRQL_requires_max_(PASSIVE_LEVEL)

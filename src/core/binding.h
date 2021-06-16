@@ -160,6 +160,7 @@ typedef enum QUIC_BINDING_LOOKUP_TYPE {
 // remote IP address.
 //
 typedef struct QUIC_BINDING {
+    QUIC_LIBRARY *Library;
 
     //
     // The link in the library's global list of bindings.
@@ -264,12 +265,12 @@ CXPLAT_DATAPATH_UNREACHABLE_CALLBACK QuicBindingUnreachable;
 _IRQL_requires_max_(PASSIVE_LEVEL)
 QUIC_STATUS
 QuicBindingInitialize(
+    _In_ QUIC_LIBRARY *Library,
 #ifdef QUIC_COMPARTMENT_ID
     _In_ QUIC_COMPARTMENT_ID CompartmentId,
 #endif
     _In_ BOOLEAN ShareBinding,
     _In_ BOOLEAN ServerOwned,
-    _In_ BOOLEAN ExternalSocket,
     _In_opt_ const QUIC_ADDR* LocalAddress,
     _In_opt_ const QUIC_ADDR* RemoteAddress,
     _Out_ QUIC_BINDING** NewBinding
@@ -447,8 +448,7 @@ _IRQL_requires_max_(DISPATCH_LEVEL)
 QUIC_STATUS
 QuicBindingGenerateStatelessResetToken(
     _In_ QUIC_BINDING* Binding,
-    _In_reads_(MsQuicLib.CidTotalLength)
-        const uint8_t* const CID,
+    _In_ const uint8_t* const CID,
     _Out_writes_all_(QUIC_STATELESS_RESET_TOKEN_LENGTH)
         uint8_t* ResetToken
     );
@@ -460,6 +460,7 @@ inline
 _IRQL_requires_max_(DISPATCH_LEVEL)
 BOOLEAN
 QuicRetryTokenDecrypt(
+    _In_ QUIC_LIBRARY* Library,
     _In_ const CXPLAT_RECV_PACKET* const Packet,
     _In_reads_(sizeof(QUIC_RETRY_TOKEN_CONTENTS))
         const uint8_t* TokenBuffer,
@@ -472,23 +473,24 @@ QuicRetryTokenDecrypt(
     CxPlatCopyMemory(Token, TokenBuffer, sizeof(QUIC_RETRY_TOKEN_CONTENTS));
 
     uint8_t Iv[CXPLAT_MAX_IV_LENGTH];
-    if (MsQuicLib.CidTotalLength >= CXPLAT_IV_LENGTH) {
+    if (Library->CidTotalLength >= CXPLAT_IV_LENGTH) {
         CxPlatCopyMemory(Iv, Packet->DestCid, CXPLAT_IV_LENGTH);
-        for (uint8_t i = CXPLAT_IV_LENGTH; i < MsQuicLib.CidTotalLength; ++i) {
+        for (uint8_t i = CXPLAT_IV_LENGTH; i < Library->CidTotalLength; ++i) {
             Iv[i % CXPLAT_IV_LENGTH] ^= Packet->DestCid[i];
         }
     } else {
         CxPlatZeroMemory(Iv, CXPLAT_IV_LENGTH);
-        CxPlatCopyMemory(Iv, Packet->DestCid, MsQuicLib.CidTotalLength);
+        CxPlatCopyMemory(Iv, Packet->DestCid, Library->CidTotalLength);
     }
 
-    CxPlatDispatchLockAcquire(&MsQuicLib.StatelessRetryKeysLock);
+    CxPlatDispatchLockAcquire(&Library->StatelessRetryKeysLock);
 
     CXPLAT_KEY* StatelessRetryKey =
         QuicLibraryGetStatelessRetryKeyForTimestamp(
+            Library,
             Token->Authenticated.Timestamp);
     if (StatelessRetryKey == NULL) {
-        CxPlatDispatchLockRelease(&MsQuicLib.StatelessRetryKeysLock);
+        CxPlatDispatchLockRelease(&Library->StatelessRetryKeysLock);
         return FALSE;
     }
 
@@ -501,6 +503,6 @@ QuicRetryTokenDecrypt(
             sizeof(Token->Encrypted) + sizeof(Token->EncryptionTag),
             (uint8_t*)&Token->Encrypted);
 
-    CxPlatDispatchLockRelease(&MsQuicLib.StatelessRetryKeysLock);
+    CxPlatDispatchLockRelease(&Library->StatelessRetryKeysLock);
     return QUIC_SUCCEEDED(Status);
 }

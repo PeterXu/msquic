@@ -44,6 +44,7 @@ MsQuicListenerOpen(
     }
 
     Registration = (QUIC_REGISTRATION*)RegistrationHandle;
+    QUIC_LIBRARY *Library = Registration->Library;
 
     Listener = CXPLAT_ALLOC_NONPAGED(sizeof(QUIC_LISTENER), QUIC_POOL_LISTENER);
     if (Listener == NULL) {
@@ -57,6 +58,7 @@ MsQuicListenerOpen(
     }
 
     CxPlatZeroMemory(Listener, sizeof(QUIC_LISTENER));
+    Listener->Library = Library;
     Listener->Type = QUIC_HANDLE_TYPE_LISTENER;
     Listener->Registration = Registration;
     Listener->ClientCallbackHandler = Handler;
@@ -218,6 +220,7 @@ MsQuicListenerStartEx(
 
 #pragma prefast(suppress: __WARNING_25024, "Pointer cast already validated.")
     Listener = (QUIC_LISTENER*)Handle;
+    QUIC_LIBRARY *Library = Listener->Library;
 
     if (Listener->Binding) {
         Status = QUIC_STATUS_INVALID_STATE;
@@ -268,20 +271,24 @@ MsQuicListenerStartEx(
     QuicAddrSetPort(&BindingLocalAddress,
         PortUnspecified ? 0 : QuicAddrGetPort(LocalAddress));
 
-    if (!QuicLibraryOnListenerRegistered(Listener)) {
+    if (!QuicLibraryOnListenerRegistered(Library, Listener)) {
         Status = QUIC_STATUS_OUT_OF_MEMORY;
         goto Error;
+	}
+
+    if (OutputHandler != NULL) {
+        Library->ExternalSocket = TRUE;
     }
 
     CXPLAT_TEL_ASSERT(Listener->Binding == NULL);
     Status =
-        QuicLibraryGetBindingEx(
+        QuicLibraryGetBinding(
+            Library,
 #ifdef QUIC_COMPARTMENT_ID
             QuicCompartmentIdGetCurrent(),
 #endif
             TRUE,           // Listeners always share the binding.
             TRUE,
-            OutputHandler != NULL,
             &BindingLocalAddress,
             NULL,
             &Listener->Binding);
@@ -332,7 +339,7 @@ Error:
 
     if (QUIC_FAILED(Status)) {
         if (Listener->Binding != NULL) {
-            QuicLibraryReleaseBinding(Listener->Binding);
+            QuicLibraryReleaseBinding(Library, Listener->Binding);
             Listener->Binding = NULL;
         }
         if (Listener->AlpnList != NULL) {
@@ -368,9 +375,10 @@ MsQuicListenerStop(
     if (Handle != NULL && Handle->Type == QUIC_HANDLE_TYPE_LISTENER) {
 #pragma prefast(suppress: __WARNING_25024, "Pointer cast already validated.")
         QUIC_LISTENER* Listener = (QUIC_LISTENER*)Handle;
+        QUIC_LIBRARY* Library = Listener->Library;
         if (Listener->Binding != NULL) {
             QuicBindingUnregisterListener(Listener->Binding, Listener);
-            QuicLibraryReleaseBinding(Listener->Binding);
+            QuicLibraryReleaseBinding(Library, Listener->Binding);
             Listener->Binding = NULL;
 
             CxPlatRundownReleaseAndWait(&Listener->Rundown);
@@ -571,6 +579,7 @@ QuicListenerAcceptConnection(
     _In_ const QUIC_NEW_CONNECTION_INFO* Info
     )
 {
+    QUIC_LIBRARY *Library = Listener->Library;
     if (!QuicRegistrationAcceptConnection(
             Listener->Registration,
             Connection)) {
@@ -593,7 +602,7 @@ QuicListenerAcceptConnection(
 
     if (!QuicListenerClaimConnection(Listener, Connection, Info)) {
         Listener->TotalRejectedConnections++;
-        QuicPerfCounterIncrement(QUIC_PERF_COUNTER_CONN_APP_REJECT);
+        QuicPerfCounterIncrement(Library, QUIC_PERF_COUNTER_CONN_APP_REJECT);
         return;
     }
 

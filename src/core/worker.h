@@ -8,7 +8,9 @@
 //
 // A worker thread for draining queued operations on a connection.
 //
+typedef struct QUIC_LIBRARY QUIC_LIBRARY;
 typedef struct QUIC_CACHEALIGN QUIC_WORKER {
+    QUIC_LIBRARY *Library;
 
     //
     // An event to kick the thread.
@@ -111,7 +113,7 @@ QuicWorkerIsOverloaded(
     _In_ QUIC_WORKER* Worker
     )
 {
-    return Worker->AverageQueueDelay > MsQuicLib.Settings.MaxWorkerQueueDelayUs;
+    return Worker->AverageQueueDelay > Worker->Library->Settings.MaxWorkerQueueDelayUs;
 }
 
 //
@@ -120,6 +122,7 @@ QuicWorkerIsOverloaded(
 _IRQL_requires_max_(PASSIVE_LEVEL)
 QUIC_STATUS
 QuicWorkerPoolInitialize(
+    _In_ QUIC_LIBRARY* Library,
     _In_opt_ const void* Owner,
     _In_ uint16_t ThreadFlags,
     _In_ uint16_t WorkerCount,

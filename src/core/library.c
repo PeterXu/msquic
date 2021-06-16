@@ -21,14 +21,48 @@ QUIC_TRACE_RUNDOWN_CALLBACK QuicTraceRundown;
 _IRQL_requires_max_(PASSIVE_LEVEL)
 void
 QuicLibApplyLoadBalancingSetting(
-    void
+    QUIC_LIBRARY *Library
     );
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 void
 QuicLibraryEvaluateSendRetryState(
-    void
+    QUIC_LIBRARY *Library
     );
+
+void
+QuicLibraryPrivateInit(
+    QUIC_LIBRARY *Library,
+    BOOLEAN ExternalSocket
+    )
+{
+    if (Library != NULL) {
+        CxPlatLockInitialize(&Library->Lock);
+        CxPlatDispatchLockInitialize(&Library->DatapathLock);
+        CxPlatDispatchLockInitialize(&MsQuicLib.StatelessRetryKeysLock);
+        CxPlatListInitializeHead(&Library->Registrations);
+        CxPlatListInitializeHead(&Library->Bindings);
+        QuicTraceRundownCallback = QuicTraceRundown;
+        Library->ExternalSocket = ExternalSocket;
+        Library->Loaded = TRUE;
+    }
+}
+
+void
+QuicLibraryPrivateUnInit(
+    QUIC_LIBRARY *Library
+    )
+{
+    if (Library != NULL) {
+        CXPLAT_FRE_ASSERT(Library->Loaded);
+        QUIC_LIB_VERIFY(Library, Library->RefCount == 0);
+        QUIC_LIB_VERIFY(Library, !Library->InUse);
+        Library->Loaded = FALSE;
+        CxPlatDispatchLockUninitialize(&MsQuicLib.StatelessRetryKeysLock);
+        CxPlatDispatchLockUninitialize(&Library->DatapathLock);
+        CxPlatLockUninitialize(&Library->Lock);
+    }
+}
 
 //
 // Initializes all global variables.
@@ -40,13 +74,7 @@ MsQuicLibraryLoad(
     void
     )
 {
-    CxPlatLockInitialize(&MsQuicLib.Lock);
-    CxPlatDispatchLockInitialize(&MsQuicLib.DatapathLock);
-    CxPlatDispatchLockInitialize(&MsQuicLib.StatelessRetryKeysLock);
-    CxPlatListInitializeHead(&MsQuicLib.Registrations);
-    CxPlatListInitializeHead(&MsQuicLib.Bindings);
-    QuicTraceRundownCallback = QuicTraceRundown;
-    MsQuicLib.Loaded = TRUE;
+    QuicLibraryPrivateInit(&MsQuicLib, FALSE);
 }
 
 //
@@ -58,24 +86,18 @@ MsQuicLibraryUnload(
     void
     )
 {
-    CXPLAT_FRE_ASSERT(MsQuicLib.Loaded);
-    QUIC_LIB_VERIFY(MsQuicLib.RefCount == 0);
-    QUIC_LIB_VERIFY(!MsQuicLib.InUse);
-    MsQuicLib.Loaded = FALSE;
-    CxPlatDispatchLockUninitialize(&MsQuicLib.StatelessRetryKeysLock);
-    CxPlatDispatchLockUninitialize(&MsQuicLib.DatapathLock);
-    CxPlatLockUninitialize(&MsQuicLib.Lock);
+    QuicLibraryPrivateUnInit(&MsQuicLib);
 }
 
 void
 MsQuicCalculatePartitionMask(
-    void
+    QUIC_LIBRARY *Library
     )
 {
-    CXPLAT_DBG_ASSERT(MsQuicLib.PartitionCount != 0);
-    CXPLAT_DBG_ASSERT(MsQuicLib.PartitionCount != 0xFFFF);
+    CXPLAT_DBG_ASSERT(Library->PartitionCount != 0);
+    CXPLAT_DBG_ASSERT(Library->PartitionCount != 0xFFFF);
 
-    uint16_t PartitionCount = MsQuicLib.PartitionCount;
+    uint16_t PartitionCount = Library->PartitionCount;
 
     PartitionCount |= (PartitionCount >> 1);
     PartitionCount |= (PartitionCount >> 2);
@@ -83,25 +105,26 @@ MsQuicCalculatePartitionMask(
     PartitionCount |= (PartitionCount >> 8);
     uint16_t HighBitSet = PartitionCount - (PartitionCount >> 1);
 
-    MsQuicLib.PartitionMask = (HighBitSet << 1) - 1;
+    Library->PartitionMask = (HighBitSet << 1) - 1;
 }
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
 void
 QuicLibrarySumPerfCounters(
+    _In_ QUIC_LIBRARY *Library,
     _Out_writes_bytes_(BufferLength) uint8_t* Buffer,
     _In_ uint32_t BufferLength
     )
 {
     CXPLAT_DBG_ASSERT(BufferLength == (BufferLength / sizeof(uint64_t) * sizeof(uint64_t)));
-    CXPLAT_DBG_ASSERT(BufferLength <= sizeof(MsQuicLib.PerProc[0].PerfCounters));
+    CXPLAT_DBG_ASSERT(BufferLength <= sizeof(Library->PerProc[0].PerfCounters));
     const uint32_t CountersPerBuffer = BufferLength / sizeof(int64_t);
     int64_t* const Counters = (int64_t*)Buffer;
-    memcpy(Buffer, MsQuicLib.PerProc[0].PerfCounters, BufferLength);
+    memcpy(Buffer, Library->PerProc[0].PerfCounters, BufferLength);
 
-    for (uint32_t ProcIndex = 1; ProcIndex < MsQuicLib.ProcessorCount; ++ProcIndex) {
+    for (uint32_t ProcIndex = 1; ProcIndex < Library->ProcessorCount; ++ProcIndex) {
         for (uint32_t CounterIndex = 0; CounterIndex < CountersPerBuffer; ++CounterIndex) {
-            Counters[CounterIndex] += MsQuicLib.PerProc[ProcIndex].PerfCounters[CounterIndex];
+            Counters[CounterIndex] += Library->PerProc[ProcIndex].PerfCounters[CounterIndex];
         }
     }
 
@@ -118,24 +141,26 @@ QuicLibrarySumPerfCounters(
 _IRQL_requires_max_(PASSIVE_LEVEL)
 void
 QuicLibrarySumPerfCountersExternal(
+    _In_ QUIC_LIBRARY *Library,
     _Out_writes_bytes_(BufferLength) uint8_t* Buffer,
     _In_ uint32_t BufferLength
     )
 {
-    CxPlatLockAcquire(&MsQuicLib.Lock);
+    CxPlatLockAcquire(&Library->Lock);
 
-    if (MsQuicLib.RefCount == 0) {
+    if (Library->RefCount == 0) {
         CxPlatZeroMemory(Buffer, BufferLength);
     } else {
-        QuicLibrarySumPerfCounters(Buffer, BufferLength);
+        QuicLibrarySumPerfCounters(Library, Buffer, BufferLength);
     }
 
-    CxPlatLockRelease(&MsQuicLib.Lock);
+    CxPlatLockRelease(&Library->Lock);
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 void
 QuicPerfCounterSnapShot(
+    _In_ QUIC_LIBRARY *Library,
     _In_ uint64_t TimeDiffUs
     )
 {
@@ -143,19 +168,20 @@ QuicPerfCounterSnapShot(
 
     int64_t PerfCounterSamples[QUIC_PERF_COUNTER_MAX];
     QuicLibrarySumPerfCounters(
+        Library,
         (uint8_t*)PerfCounterSamples,
         sizeof(PerfCounterSamples));
 
 // Ensure a perf counter stays below a given max Hz/frequency.
 #define QUIC_COUNTER_LIMIT_HZ(TYPE, LIMIT_PER_SECOND) \
     CXPLAT_TEL_ASSERT( \
-        ((1000 * 1000 * (PerfCounterSamples[TYPE] - MsQuicLib.PerfCounterSamples[TYPE])) / TimeDiffUs) < LIMIT_PER_SECOND)
+        ((1000 * 1000 * (PerfCounterSamples[TYPE] - Library->PerfCounterSamples[TYPE])) / TimeDiffUs) < LIMIT_PER_SECOND)
 
 // Ensures a perf counter doesn't consistently (both samples) go above a give max value.
 #define QUIC_COUNTER_CAP(TYPE, MAX_LIMIT) \
     CXPLAT_TEL_ASSERT( \
         PerfCounterSamples[TYPE] < MAX_LIMIT || \
-        MsQuicLib.PerfCounterSamples[TYPE] < MAX_LIMIT)
+        Library->PerfCounterSamples[TYPE] < MAX_LIMIT)
 
     //
     // Some heuristics to ensure that bad things aren't happening. TODO - these
@@ -165,7 +191,7 @@ QuicPerfCounterSnapShot(
     QUIC_COUNTER_CAP(QUIC_PERF_COUNTER_CONN_QUEUE_DEPTH, 100000); // Don't maintain huge queue depths
 
     CxPlatCopyMemory(
-        MsQuicLib.PerfCounterSamples,
+        Library->PerfCounterSamples,
         PerfCounterSamples,
         sizeof(PerfCounterSamples));
 }
@@ -173,33 +199,34 @@ QuicPerfCounterSnapShot(
 _IRQL_requires_max_(PASSIVE_LEVEL)
 void
 MsQuicLibraryOnSettingsChanged(
+    _In_ QUIC_LIBRARY *Library,
     _In_ BOOLEAN UpdateRegistrations
     )
 {
-    if (!MsQuicLib.InUse) {
+    if (!Library->InUse) {
         //
         // Load balancing settings can only change before the library is
         // officially "in use", otherwise existing connections would be
         // destroyed.
         //
-        QuicLibApplyLoadBalancingSetting();
+        QuicLibApplyLoadBalancingSetting(Library);
     }
 
-    MsQuicLib.HandshakeMemoryLimit =
-        (MsQuicLib.Settings.RetryMemoryLimit * CxPlatTotalMemory) / UINT16_MAX;
-    QuicLibraryEvaluateSendRetryState();
+    Library->HandshakeMemoryLimit =
+        (Library->Settings.RetryMemoryLimit * CxPlatTotalMemory) / UINT16_MAX;
+    QuicLibraryEvaluateSendRetryState(Library);
 
     if (UpdateRegistrations) {
-        CxPlatLockAcquire(&MsQuicLib.Lock);
+        CxPlatLockAcquire(&Library->Lock);
 
-        for (CXPLAT_LIST_ENTRY* Link = MsQuicLib.Registrations.Flink;
-            Link != &MsQuicLib.Registrations;
+        for (CXPLAT_LIST_ENTRY* Link = Library->Registrations.Flink;
+            Link != &Library->Registrations;
             Link = Link->Flink) {
             QuicRegistrationSettingsChanged(
                 CXPLAT_CONTAINING_RECORD(Link, QUIC_REGISTRATION, Link));
         }
 
-        CxPlatLockRelease(&MsQuicLib.Lock);
+        CxPlatLockRelease(&Library->Lock);
     }
 }
 
@@ -207,33 +234,37 @@ _IRQL_requires_max_(PASSIVE_LEVEL)
 _Function_class_(CXPLAT_STORAGE_CHANGE_CALLBACK)
 void
 MsQuicLibraryReadSettings(
+    _In_ void* ALibrary,
     _In_opt_ void* Context
     )
 {
-    QuicSettingsSetDefault(&MsQuicLib.Settings);
-    if (MsQuicLib.Storage != NULL) {
-        QuicSettingsLoad(&MsQuicLib.Settings, MsQuicLib.Storage);
+    QUIC_LIBRARY* Library = (QUIC_LIBRARY *)ALibrary;
+
+    QuicSettingsSetDefault(&Library->Settings);
+    if (Library->Storage != NULL) {
+        QuicSettingsLoad(Library, &Library->Settings, Library->Storage);
     }
 
     QuicTraceLogInfo(
         LibrarySettingsUpdated,
         "[ lib] Settings %p Updated",
-        &MsQuicLib.Settings);
-    QuicSettingsDump(&MsQuicLib.Settings);
+        &Library->Settings);
+    QuicSettingsDump(&Library->Settings);
 
-    MsQuicLibraryOnSettingsChanged(Context != NULL);
+    MsQuicLibraryOnSettingsChanged(Library, Context != NULL);
 }
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
 QUIC_STATUS
 MsQuicLibraryInitialize(
-    void
+    QUIC_LIBRARY *Library
     )
 {
     QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
     BOOLEAN PlatformInitialized = FALSE;
     uint32_t DefaultMaxPartitionCount = QUIC_MAX_PARTITION_COUNT;
     const CXPLAT_UDP_DATAPATH_CALLBACKS DatapathCallbacks = {
+        Library->ExternalSocket,
         QuicBindingReceive,
         QuicBindingExternalOutput,
         QuicBindingUnreachable
@@ -246,21 +277,22 @@ MsQuicLibraryInitialize(
     PlatformInitialized = TRUE;
 
     CXPLAT_DBG_ASSERT(US_TO_MS(CxPlatGetTimerResolution()) + 1 <= UINT8_MAX);
-    MsQuicLib.TimerResolutionMs = (uint8_t)US_TO_MS(CxPlatGetTimerResolution()) + 1;
+    Library->TimerResolutionMs = (uint8_t)US_TO_MS(CxPlatGetTimerResolution()) + 1;
 
-    MsQuicLib.PerfCounterSamplesTime = CxPlatTimeUs64();
-    CxPlatZeroMemory(MsQuicLib.PerfCounterSamples, sizeof(MsQuicLib.PerfCounterSamples));
+    Library->PerfCounterSamplesTime = CxPlatTimeUs64();
+    CxPlatZeroMemory(Library->PerfCounterSamples, sizeof(Library->PerfCounterSamples));
 
-    CxPlatRandom(sizeof(MsQuicLib.ToeplitzHash.HashKey), MsQuicLib.ToeplitzHash.HashKey);
-    CxPlatToeplitzHashInitialize(&MsQuicLib.ToeplitzHash);
+    CxPlatRandom(sizeof(Library->ToeplitzHash.HashKey), Library->ToeplitzHash.HashKey);
+    CxPlatToeplitzHashInitialize(&Library->ToeplitzHash);
 
-    CxPlatZeroMemory(&MsQuicLib.Settings, sizeof(MsQuicLib.Settings));
+    CxPlatZeroMemory(&Library->Settings, sizeof(Library->Settings));
     Status =
-        CxPlatStorageOpen(
+        CxPlatStorageOpenEx(
             NULL,
             MsQuicLibraryReadSettings,
+            (void*)Library,
             (void*)TRUE, // Non-null indicates registrations should be updated
-            &MsQuicLib.Storage);
+            &Library->Storage);
     if (QUIC_FAILED(Status)) {
         QuicTraceLogWarning(
             LibraryStorageOpenFailed,
@@ -269,7 +301,7 @@ MsQuicLibraryInitialize(
         // Non-fatal, as the process may not have access
     }
 
-    MsQuicLibraryReadSettings(NULL); // NULL means don't update registrations.
+    MsQuicLibraryReadSettings((void*)Library, NULL); // NULL means don't update registrations.
 
     CxPlatZeroMemory(&MsQuicLib.StatelessRetryKeys, sizeof(MsQuicLib.StatelessRetryKeys));
     CxPlatZeroMemory(&MsQuicLib.StatelessRetryKeysExpiration, sizeof(MsQuicLib.StatelessRetryKeysExpiration));
@@ -281,9 +313,9 @@ MsQuicLibraryInitialize(
         ARRAYSIZE(DefaultSupportedVersionsList),
         NULL,
         &CompatibilityListByteLength);
-    MsQuicLib.DefaultCompatibilityList =
+    Library->DefaultCompatibilityList =
         CXPLAT_ALLOC_NONPAGED(CompatibilityListByteLength, QUIC_POOL_DEFAULT_COMPAT_VER_LIST);
-    if (MsQuicLib.DefaultCompatibilityList == NULL) {
+    if (Library->DefaultCompatibilityList == NULL) {
         QuicTraceEvent(
             AllocFailure,
             "Allocation of '%s' failed. (%llu bytes)", "default compatibility list",
@@ -291,13 +323,13 @@ MsQuicLibraryInitialize(
         Status = QUIC_STATUS_OUT_OF_MEMORY;
         goto Error;
     }
-    MsQuicLib.DefaultCompatibilityListLength = CompatibilityListByteLength / sizeof(uint32_t);
+    Library->DefaultCompatibilityListLength = CompatibilityListByteLength / sizeof(uint32_t);
     if (QUIC_FAILED(
         QuicVersionNegotiationExtGenerateCompatibleVersionsList(
             QUIC_VERSION_LATEST,
             DefaultSupportedVersionsList,
             ARRAYSIZE(DefaultSupportedVersionsList),
-            (uint8_t*)MsQuicLib.DefaultCompatibilityList,
+            (uint8_t*)Library->DefaultCompatibilityList,
             &CompatibilityListByteLength))) {
          goto Error;
     }
@@ -306,10 +338,10 @@ MsQuicLibraryInitialize(
     // TODO: Add support for CPU hot swap/add.
     //
 
-    if (MsQuicLib.Storage != NULL) {
+    if (Library->Storage != NULL) {
         uint32_t DefaultMaxPartitionCountLen = sizeof(DefaultMaxPartitionCount);
         CxPlatStorageReadValue(
-            MsQuicLib.Storage,
+            Library->Storage,
             QUIC_SETTING_MAX_PARTITION_COUNT,
             (uint8_t*)&DefaultMaxPartitionCount,
             &DefaultMaxPartitionCountLen);
@@ -317,44 +349,44 @@ MsQuicLibraryInitialize(
             DefaultMaxPartitionCount = QUIC_MAX_PARTITION_COUNT;
         }
     }
-    MsQuicLib.ProcessorCount = (uint16_t)CxPlatProcActiveCount();
-    CXPLAT_FRE_ASSERT(MsQuicLib.ProcessorCount > 0);
-    MsQuicLib.PartitionCount = (uint16_t)min(MsQuicLib.ProcessorCount, DefaultMaxPartitionCount);
+    Library->ProcessorCount = (uint16_t)CxPlatProcActiveCount();
+    CXPLAT_FRE_ASSERT(Library->ProcessorCount > 0);
+    Library->PartitionCount = (uint16_t)min(Library->ProcessorCount, DefaultMaxPartitionCount);
 
-    MsQuicCalculatePartitionMask();
+    MsQuicCalculatePartitionMask(Library);
 
-    MsQuicLib.PerProc =
+    Library->PerProc =
         CXPLAT_ALLOC_NONPAGED(
-            MsQuicLib.ProcessorCount * sizeof(QUIC_LIBRARY_PP),
+            Library->ProcessorCount * sizeof(QUIC_LIBRARY_PP),
             QUIC_POOL_PERPROC);
-    if (MsQuicLib.PerProc == NULL) {
+    if (Library->PerProc == NULL) {
         QuicTraceEvent(
             AllocFailure,
             "Allocation of '%s' failed. (%llu bytes)", "connection pools",
-            MsQuicLib.PartitionCount * sizeof(QUIC_LIBRARY_PP));
+            Library->PartitionCount * sizeof(QUIC_LIBRARY_PP));
         Status = QUIC_STATUS_OUT_OF_MEMORY;
         goto Error;
     }
 
-    for (uint16_t i = 0; i < MsQuicLib.ProcessorCount; ++i) {
+    for (uint16_t i = 0; i < Library->ProcessorCount; ++i) {
         CxPlatPoolInitialize(
             FALSE,
             sizeof(QUIC_CONNECTION),
             QUIC_POOL_CONN,
-            &MsQuicLib.PerProc[i].ConnectionPool);
+            &Library->PerProc[i].ConnectionPool);
         CxPlatPoolInitialize(
             FALSE,
             sizeof(QUIC_TRANSPORT_PARAMETERS),
             QUIC_POOL_TP,
-            &MsQuicLib.PerProc[i].TransportParamPool);
+            &Library->PerProc[i].TransportParamPool);
         CxPlatPoolInitialize(
             FALSE,
             sizeof(QUIC_PACKET_SPACE),
             QUIC_POOL_TP,
-            &MsQuicLib.PerProc[i].PacketSpacePool);
+            &Library->PerProc[i].PacketSpacePool);
         CxPlatZeroMemory(
-            &MsQuicLib.PerProc[i].PerfCounters,
-            sizeof(MsQuicLib.PerProc[i].PerfCounters));
+            &Library->PerProc[i].PerfCounters,
+            sizeof(Library->PerProc[i].PerfCounters));
     }
 
     Status =
@@ -362,7 +394,7 @@ MsQuicLibraryInitialize(
             sizeof(CXPLAT_RECV_PACKET),
             &DatapathCallbacks,
             NULL,                   // TcpCallbacks
-            &MsQuicLib.Datapath);
+            &Library->Datapath);
     if (QUIC_FAILED(Status)) {
         QuicTraceEvent(
             LibraryErrorStatus,
@@ -375,13 +407,13 @@ MsQuicLibraryInitialize(
     QuicTraceEvent(
         LibraryInitialized,
         "[ lib] Initialized, PartitionCount=%u DatapathFeatures=%u",
-        MsQuicLib.PartitionCount,
-        CxPlatDataPathGetSupportedFeatures(MsQuicLib.Datapath));
+        Library->PartitionCount,
+        CxPlatDataPathGetSupportedFeatures(Library->Datapath));
 
 #ifdef CxPlatVerifierEnabled
     uint32_t Flags;
-    MsQuicLib.IsVerifying = CxPlatVerifierEnabled(Flags);
-    if (MsQuicLib.IsVerifying) {
+    Library->IsVerifying = CxPlatVerifierEnabled(Flags);
+    if (Library->IsVerifying) {
 #ifdef CxPlatVerifierEnabledByAddr
         QuicTraceLogInfo(
             LibraryVerifierEnabledPerRegistration,
@@ -397,18 +429,18 @@ MsQuicLibraryInitialize(
 Error:
 
     if (QUIC_FAILED(Status)) {
-        if (MsQuicLib.PerProc != NULL) {
-            for (uint16_t i = 0; i < MsQuicLib.ProcessorCount; ++i) {
-                CxPlatPoolUninitialize(&MsQuicLib.PerProc[i].ConnectionPool);
-                CxPlatPoolUninitialize(&MsQuicLib.PerProc[i].TransportParamPool);
-                CxPlatPoolUninitialize(&MsQuicLib.PerProc[i].PacketSpacePool);
+        if (Library->PerProc != NULL) {
+            for (uint16_t i = 0; i < Library->ProcessorCount; ++i) {
+                CxPlatPoolUninitialize(&Library->PerProc[i].ConnectionPool);
+                CxPlatPoolUninitialize(&Library->PerProc[i].TransportParamPool);
+                CxPlatPoolUninitialize(&Library->PerProc[i].PacketSpacePool);
             }
-            CXPLAT_FREE(MsQuicLib.PerProc, QUIC_POOL_PERPROC);
-            MsQuicLib.PerProc = NULL;
+            CXPLAT_FREE(Library->PerProc, QUIC_POOL_PERPROC);
+            Library->PerProc = NULL;
         }
-        if (MsQuicLib.Storage != NULL) {
-            CxPlatStorageClose(MsQuicLib.Storage);
-            MsQuicLib.Storage = NULL;
+        if (Library->Storage != NULL) {
+            CxPlatStorageClose(Library->Storage);
+            Library->Storage = NULL;
         }
         if (PlatformInitialized) {
             CxPlatUninitialize();
@@ -421,7 +453,7 @@ Error:
 _IRQL_requires_max_(PASSIVE_LEVEL)
 void
 MsQuicLibraryUninitialize(
-    void
+    QUIC_LIBRARY *Library
     )
 {
     //
@@ -443,28 +475,28 @@ MsQuicLibraryUninitialize(
     // Clean up the data path first, which can continue to cause new connections
     // to get created.
     //
-    CxPlatDataPathUninitialize(MsQuicLib.Datapath);
-    MsQuicLib.Datapath = NULL;
+    CxPlatDataPathUninitialize(Library->Datapath);
+    Library->Datapath = NULL;
 
     //
     // Wait for the final clean up of everything in the stateless registration
     // and then free it.
     //
-    if (MsQuicLib.StatelessRegistration != NULL) {
+    if (Library->StatelessRegistration != NULL) {
         MsQuicRegistrationClose(
-            (HQUIC)MsQuicLib.StatelessRegistration);
-        MsQuicLib.StatelessRegistration = NULL;
+            (HQUIC)Library->StatelessRegistration);
+        Library->StatelessRegistration = NULL;
     }
 
     //
     // If you hit this assert, MsQuic API is trying to be unloaded without
     // first closing all registrations.
     //
-    CXPLAT_TEL_ASSERT(CxPlatListIsEmpty(&MsQuicLib.Registrations));
+    CXPLAT_TEL_ASSERT(CxPlatListIsEmpty(&Library->Registrations));
 
-    if (MsQuicLib.Storage != NULL) {
-        CxPlatStorageClose(MsQuicLib.Storage);
-        MsQuicLib.Storage = NULL;
+    if (Library->Storage != NULL) {
+        CxPlatStorageClose(Library->Storage);
+        Library->Storage = NULL;
     }
 
 #if DEBUG
@@ -472,12 +504,12 @@ MsQuicLibraryUninitialize(
     // If you hit this assert, MsQuic API is trying to be unloaded without
     // first cleaning up all connections.
     //
-    CXPLAT_TEL_ASSERT(MsQuicLib.ConnectionCount == 0);
+    CXPLAT_TEL_ASSERT(Library->ConnectionCount == 0);
 #endif
 
 #if DEBUG
     uint64_t PerfCounters[QUIC_PERF_COUNTER_MAX];
-    QuicLibrarySumPerfCounters((uint8_t*)PerfCounters, sizeof(PerfCounters));
+    QuicLibrarySumPerfCounters(Library, (uint8_t*)PerfCounters, sizeof(PerfCounters));
 
     //
     // All active/current counters should be zero by cleanup.
@@ -494,24 +526,24 @@ MsQuicLibraryUninitialize(
     // If you hit this assert, MsQuic API is trying to be unloaded without
     // first being cleaned up all listeners and connections.
     //
-    CXPLAT_TEL_ASSERT(CxPlatListIsEmpty(&MsQuicLib.Bindings));
+    CXPLAT_TEL_ASSERT(CxPlatListIsEmpty(&Library->Bindings));
 
-    for (uint16_t i = 0; i < MsQuicLib.ProcessorCount; ++i) {
-        CxPlatPoolUninitialize(&MsQuicLib.PerProc[i].ConnectionPool);
-        CxPlatPoolUninitialize(&MsQuicLib.PerProc[i].TransportParamPool);
-        CxPlatPoolUninitialize(&MsQuicLib.PerProc[i].PacketSpacePool);
+    for (uint16_t i = 0; i < Library->ProcessorCount; ++i) {
+        CxPlatPoolUninitialize(&Library->PerProc[i].ConnectionPool);
+        CxPlatPoolUninitialize(&Library->PerProc[i].TransportParamPool);
+        CxPlatPoolUninitialize(&Library->PerProc[i].PacketSpacePool);
     }
-    CXPLAT_FREE(MsQuicLib.PerProc, QUIC_POOL_PERPROC);
-    MsQuicLib.PerProc = NULL;
+    CXPLAT_FREE(Library->PerProc, QUIC_POOL_PERPROC);
+    Library->PerProc = NULL;
 
-    for (size_t i = 0; i < ARRAYSIZE(MsQuicLib.StatelessRetryKeys); ++i) {
-        CxPlatKeyFree(MsQuicLib.StatelessRetryKeys[i]);
-        MsQuicLib.StatelessRetryKeys[i] = NULL;
+    for (size_t i = 0; i < ARRAYSIZE(Library->StatelessRetryKeys); ++i) {
+        CxPlatKeyFree(Library->StatelessRetryKeys[i]);
+        Library->StatelessRetryKeys[i] = NULL;
     }
 
-    QuicSettingsCleanup(&MsQuicLib.Settings);
+    QuicSettingsCleanup(&Library->Settings);
 
-    CXPLAT_FREE(MsQuicLib.DefaultCompatibilityList, QUIC_POOL_DEFAULT_COMPAT_VER_LIST);
+    CXPLAT_FREE(Library->DefaultCompatibilityList, QUIC_POOL_DEFAULT_COMPAT_VER_LIST);
 
     QuicTraceEvent(
         LibraryUninitialized,
@@ -523,30 +555,30 @@ MsQuicLibraryUninitialize(
 _IRQL_requires_max_(PASSIVE_LEVEL)
 QUIC_STATUS
 MsQuicAddRef(
-    void
+    QUIC_LIBRARY *Library
     )
 {
     //
     // If you hit this assert, you are trying to call MsQuic API without
     // actually loading/starting the library/driver.
     //
-    CXPLAT_TEL_ASSERT(MsQuicLib.Loaded);
-    if (!MsQuicLib.Loaded) {
+    CXPLAT_TEL_ASSERT(Library->Loaded);
+    if (!Library->Loaded) {
         return QUIC_STATUS_INVALID_STATE;
     }
 
     QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
 
-    CxPlatLockAcquire(&MsQuicLib.Lock);
+    CxPlatLockAcquire(&Library->Lock);
 
     //
     // Increment global ref count, and if this is the first ref, initialize all
     // the global library state.
     //
-    if (++MsQuicLib.RefCount == 1) {
-        Status = MsQuicLibraryInitialize();
+    if (++Library->RefCount == 1) {
+        Status = MsQuicLibraryInitialize(Library);
         if (QUIC_FAILED(Status)) {
-            MsQuicLib.RefCount--;
+            Library->RefCount--;
             goto Error;
         }
     }
@@ -557,7 +589,7 @@ MsQuicAddRef(
 
 Error:
 
-    CxPlatLockRelease(&MsQuicLib.Lock);
+    CxPlatLockRelease(&Library->Lock);
 
     return Status;
 }
@@ -565,26 +597,26 @@ Error:
 _IRQL_requires_max_(PASSIVE_LEVEL)
 void
 MsQuicRelease(
-    void
+    QUIC_LIBRARY *Library
     )
 {
-    CxPlatLockAcquire(&MsQuicLib.Lock);
+    CxPlatLockAcquire(&Library->Lock);
 
     //
     // Decrement global ref count and uninitialize the library if this is the
     // last ref.
     //
 
-    CXPLAT_FRE_ASSERT(MsQuicLib.RefCount > 0);
+    CXPLAT_FRE_ASSERT(Library->RefCount > 0);
     QuicTraceEvent(
         LibraryRelease,
         "[ lib] Release");
 
-    if (--MsQuicLib.RefCount == 0) {
-        MsQuicLibraryUninitialize();
+    if (--Library->RefCount == 0) {
+        MsQuicLibraryUninitialize(Library);
     }
 
-    CxPlatLockRelease(&MsQuicLib.Lock);
+    CxPlatLockRelease(&Library->Lock);
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
@@ -656,37 +688,38 @@ MsQuicSetCallbackHandler(
 _IRQL_requires_max_(PASSIVE_LEVEL)
 void
 QuicLibApplyLoadBalancingSetting(
-    void
+    QUIC_LIBRARY *Library
     )
 {
-    switch (MsQuicLib.Settings.LoadBalancingMode) {
+    switch (Library->Settings.LoadBalancingMode) {
     case QUIC_LOAD_BALANCING_DISABLED:
     default:
-        MsQuicLib.CidServerIdLength = 0;
+        Library->CidServerIdLength = 0;
         break;
     case QUIC_LOAD_BALANCING_SERVER_ID_IP:
-        MsQuicLib.CidServerIdLength = 5; // 1 + 4 for v4 IP address
+        Library->CidServerIdLength = 5; // 1 + 4 for v4 IP address
         break;
     }
 
-    MsQuicLib.CidTotalLength =
-        MsQuicLib.CidServerIdLength +
+    Library->CidTotalLength =
+        Library->CidServerIdLength +
         MSQUIC_CID_PID_LENGTH +
         MSQUIC_CID_PAYLOAD_LENGTH;
 
-    CXPLAT_FRE_ASSERT(MsQuicLib.CidServerIdLength <= MSQUIC_MAX_CID_SID_LENGTH);
-    CXPLAT_FRE_ASSERT(MsQuicLib.CidTotalLength >= QUIC_MIN_INITIAL_CONNECTION_ID_LENGTH);
-    CXPLAT_FRE_ASSERT(MsQuicLib.CidTotalLength <= MSQUIC_CID_MAX_LENGTH);
+    CXPLAT_FRE_ASSERT(Library->CidServerIdLength <= MSQUIC_MAX_CID_SID_LENGTH);
+    CXPLAT_FRE_ASSERT(Library->CidTotalLength >= QUIC_MIN_INITIAL_CONNECTION_ID_LENGTH);
+    CXPLAT_FRE_ASSERT(Library->CidTotalLength <= MSQUIC_CID_MAX_LENGTH);
 
     QuicTraceLogInfo(
         LibraryCidLengthSet,
         "[ lib] CID Length = %hhu",
-        MsQuicLib.CidTotalLength);
+        Library->CidTotalLength);
 }
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
 QUIC_STATUS
 QuicLibrarySetGlobalParam(
+    _In_ QUIC_LIBRARY *Library,
     _In_ uint32_t Param,
     _In_ uint32_t BufferLength,
     _In_reads_bytes_(BufferLength)
@@ -698,17 +731,17 @@ QuicLibrarySetGlobalParam(
     switch (Param) {
     case QUIC_PARAM_GLOBAL_RETRY_MEMORY_PERCENT:
 
-        if (BufferLength != sizeof(MsQuicLib.Settings.RetryMemoryLimit)) {
+        if (BufferLength != sizeof(Library->Settings.RetryMemoryLimit)) {
             Status = QUIC_STATUS_INVALID_PARAMETER;
             break;
         }
 
-        MsQuicLib.Settings.RetryMemoryLimit = *(uint16_t*)Buffer;
-        MsQuicLib.Settings.IsSet.RetryMemoryLimit = TRUE;
+        Library->Settings.RetryMemoryLimit = *(uint16_t*)Buffer;
+        Library->Settings.IsSet.RetryMemoryLimit = TRUE;
         QuicTraceLogInfo(
             LibraryRetryMemoryLimitSet,
             "[ lib] Updated retry memory limit = %hu",
-            MsQuicLib.Settings.RetryMemoryLimit);
+            Library->Settings.RetryMemoryLimit);
 
         Status = QUIC_STATUS_SUCCESS;
         break;
@@ -725,8 +758,8 @@ QuicLibrarySetGlobalParam(
             break;
         }
 
-        if (MsQuicLib.InUse &&
-            MsQuicLib.Settings.LoadBalancingMode != *(uint16_t*)Buffer) {
+        if (Library->InUse &&
+            Library->Settings.LoadBalancingMode != *(uint16_t*)Buffer) {
             QuicTraceLogError(
                 LibraryLoadBalancingModeSetAfterInUse,
                 "[ lib] Tried to change load balancing mode after library in use!");
@@ -734,12 +767,12 @@ QuicLibrarySetGlobalParam(
             break;
         }
 
-        MsQuicLib.Settings.LoadBalancingMode = *(uint16_t*)Buffer;
-        MsQuicLib.Settings.IsSet.LoadBalancingMode = TRUE;
+        Library->Settings.LoadBalancingMode = *(uint16_t*)Buffer;
+        Library->Settings.IsSet.LoadBalancingMode = TRUE;
         QuicTraceLogInfo(
             LibraryLoadBalancingModeSet,
             "[ lib] Updated load balancing mode = %hu",
-            MsQuicLib.Settings.LoadBalancingMode);
+            Library->Settings.LoadBalancingMode);
 
         Status = QUIC_STATUS_SUCCESS;
         break;
@@ -757,7 +790,7 @@ QuicLibrarySetGlobalParam(
             "[ lib] Setting new settings");
 
         if (!QuicSettingApply(
-                &MsQuicLib.Settings,
+                &Library->Settings,
                 TRUE,
                 TRUE,
                 TRUE,
@@ -768,7 +801,7 @@ QuicLibrarySetGlobalParam(
         }
 
         QuicSettingsDumpNew(BufferLength, (QUIC_SETTINGS*)Buffer);
-        MsQuicLibraryOnSettingsChanged(TRUE);
+        MsQuicLibraryOnSettingsChanged(Library, TRUE);
 
         Status = QUIC_STATUS_SUCCESS;
         break;
@@ -781,7 +814,7 @@ QuicLibrarySetGlobalParam(
             break;
         }
 
-        MsQuicLib.TestDatapathHooks = *(QUIC_TEST_DATAPATH_HOOKS**)Buffer;
+        Library->TestDatapathHooks = *(QUIC_TEST_DATAPATH_HOOKS**)Buffer;
         QuicTraceLogWarning(
             LibraryTestDatapathHooksSet,
             "[ lib] Updated test datapath hooks");
@@ -835,6 +868,7 @@ QuicLibrarySetGlobalParam(
 _IRQL_requires_max_(PASSIVE_LEVEL)
 QUIC_STATUS
 QuicLibraryGetGlobalParam(
+    _In_ QUIC_LIBRARY *Library,
     _In_ uint32_t Param,
     _Inout_ uint32_t* BufferLength,
     _Out_writes_bytes_opt_(*BufferLength)
@@ -846,8 +880,8 @@ QuicLibraryGetGlobalParam(
     switch (Param) {
     case QUIC_PARAM_GLOBAL_RETRY_MEMORY_PERCENT:
 
-        if (*BufferLength < sizeof(MsQuicLib.Settings.RetryMemoryLimit)) {
-            *BufferLength = sizeof(MsQuicLib.Settings.RetryMemoryLimit);
+        if (*BufferLength < sizeof(Library->Settings.RetryMemoryLimit)) {
+            *BufferLength = sizeof(Library->Settings.RetryMemoryLimit);
             Status = QUIC_STATUS_BUFFER_TOO_SMALL;
             break;
         }
@@ -857,8 +891,8 @@ QuicLibraryGetGlobalParam(
             break;
         }
 
-        *BufferLength = sizeof(MsQuicLib.Settings.RetryMemoryLimit);
-        *(uint16_t*)Buffer = MsQuicLib.Settings.RetryMemoryLimit;
+        *BufferLength = sizeof(Library->Settings.RetryMemoryLimit);
+        *(uint16_t*)Buffer = Library->Settings.RetryMemoryLimit;
 
         Status = QUIC_STATUS_SUCCESS;
         break;
@@ -899,7 +933,7 @@ QuicLibraryGetGlobalParam(
         }
 
         *BufferLength = sizeof(uint16_t);
-        *(uint16_t*)Buffer = MsQuicLib.Settings.LoadBalancingMode;
+        *(uint16_t*)Buffer = Library->Settings.LoadBalancingMode;
 
         Status = QUIC_STATUS_SUCCESS;
         break;
@@ -926,7 +960,7 @@ QuicLibraryGetGlobalParam(
             *BufferLength = QUIC_PERF_COUNTER_MAX * sizeof(int64_t);
         }
 
-        QuicLibrarySumPerfCounters(Buffer, *BufferLength);
+        QuicLibrarySumPerfCounters(Library, Buffer, *BufferLength);
 
         Status = QUIC_STATUS_SUCCESS;
         break;
@@ -946,7 +980,7 @@ QuicLibraryGetGlobalParam(
         }
 
         *BufferLength = sizeof(QUIC_SETTINGS);
-        CxPlatCopyMemory(Buffer, &MsQuicLib.Settings, sizeof(QUIC_SETTINGS));
+        CxPlatCopyMemory(Buffer, &Library->Settings, sizeof(QUIC_SETTINGS));
 
         Status = QUIC_STATUS_SUCCESS;
         break;
@@ -1257,86 +1291,7 @@ MsQuicOpen(
     _Out_ _Pre_defensive_ const QUIC_API_TABLE** QuicApi
     )
 {
-    QUIC_STATUS Status;
-
-    if (QuicApi == NULL) {
-        QuicTraceLogVerbose(
-            LibraryMsQuicOpenNull,
-            "[ api] MsQuicOpen, NULL");
-        Status = QUIC_STATUS_INVALID_PARAMETER;
-        goto Exit;
-    }
-
-    QuicTraceLogVerbose(
-        LibraryMsQuicOpenEntry,
-        "[ api] MsQuicOpen");
-
-    Status = MsQuicAddRef();
-    if (QUIC_FAILED(Status)) {
-        goto Exit;
-    }
-
-    QUIC_API_TABLE* Api = CXPLAT_ALLOC_NONPAGED(sizeof(QUIC_API_TABLE), QUIC_POOL_API);
-    if (Api == NULL) {
-        Status = QUIC_STATUS_OUT_OF_MEMORY;
-        goto Error;
-    }
-
-    Api->SetContext = MsQuicSetContext;
-    Api->GetContext = MsQuicGetContext;
-    Api->SetCallbackHandler = MsQuicSetCallbackHandler;
-
-    Api->SetParam = MsQuicSetParam;
-    Api->GetParam = MsQuicGetParam;
-
-    Api->RegistrationOpen = MsQuicRegistrationOpen;
-    Api->RegistrationClose = MsQuicRegistrationClose;
-    Api->RegistrationShutdown = MsQuicRegistrationShutdown;
-
-    Api->ConfigurationOpen = MsQuicConfigurationOpen;
-    Api->ConfigurationClose = MsQuicConfigurationClose;
-    Api->ConfigurationLoadCredential = MsQuicConfigurationLoadCredential;
-
-    Api->ListenerOpen = MsQuicListenerOpen;
-    Api->ListenerClose = MsQuicListenerClose;
-    Api->ListenerStart = MsQuicListenerStart;
-    Api->ListenerStartEx = MsQuicListenerStartEx;
-    Api->ListenerStop = MsQuicListenerStop;
-    Api->ListenerExternalInput = MsQuicListenerExternalInput;
-
-    Api->ConnectionOpen = MsQuicConnectionOpen;
-    Api->ConnectionClose = MsQuicConnectionClose;
-    Api->ConnectionShutdown = MsQuicConnectionShutdown;
-    Api->ConnectionStart = MsQuicConnectionStart;
-    Api->ConnectionSetConfiguration = MsQuicConnectionSetConfiguration;
-    Api->ConnectionSendResumptionTicket = MsQuicConnectionSendResumptionTicket;
-
-    Api->StreamOpen = MsQuicStreamOpen;
-    Api->StreamClose = MsQuicStreamClose;
-    Api->StreamShutdown = MsQuicStreamShutdown;
-    Api->StreamStart = MsQuicStreamStart;
-    Api->StreamSend = MsQuicStreamSend;
-    Api->StreamReceiveComplete = MsQuicStreamReceiveComplete;
-    Api->StreamReceiveSetEnabled = MsQuicStreamReceiveSetEnabled;
-
-    Api->DatagramSend = MsQuicDatagramSend;
-
-    *QuicApi = Api;
-
-Error:
-
-    if (QUIC_FAILED(Status)) {
-        MsQuicRelease();
-    }
-
-Exit:
-
-    QuicTraceLogVerbose(
-        LibraryMsQuicOpenExit,
-        "[ api] MsQuicOpen, status=0x%x",
-        Status);
-
-    return Status;
+    return MsQuicOpenEx(&MsQuicLib, QuicApi);
 }
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
@@ -1360,18 +1315,13 @@ MsQuicClose(
     _In_ _Pre_defensive_ const void* QuicApi
     )
 {
-    if (QuicApi != NULL) {
-        QuicTraceLogVerbose(
-            LibraryMsQuicClose,
-            "[ api] MsQuicClose");
-        CXPLAT_FREE(QuicApi, QUIC_POOL_API);
-        MsQuicRelease();
-    }
+    return MsQuicCloseEx(&MsQuicLib, QuicApi);
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 QUIC_BINDING*
 QuicLibraryLookupBinding(
+    _In_ QUIC_LIBRARY *Library,
 #ifdef QUIC_COMPARTMENT_ID
     _In_ QUIC_COMPARTMENT_ID CompartmentId,
 #endif
@@ -1379,8 +1329,8 @@ QuicLibraryLookupBinding(
     _In_opt_ const QUIC_ADDR* RemoteAddress
     )
 {
-    for (CXPLAT_LIST_ENTRY* Link = MsQuicLib.Bindings.Flink;
-        Link != &MsQuicLib.Bindings;
+    for (CXPLAT_LIST_ENTRY* Link = Library->Bindings.Flink;
+        Link != &Library->Bindings;
         Link = Link->Flink) {
 
         QUIC_BINDING* Binding =
@@ -1423,33 +1373,12 @@ QuicLibraryLookupBinding(
 _IRQL_requires_max_(PASSIVE_LEVEL)
 QUIC_STATUS
 QuicLibraryGetBinding(
+    _In_ QUIC_LIBRARY *Library,
 #ifdef QUIC_COMPARTMENT_ID
     _In_ QUIC_COMPARTMENT_ID CompartmentId,
 #endif
     _In_ BOOLEAN ShareBinding,
     _In_ BOOLEAN ServerOwned,
-    _In_opt_ const QUIC_ADDR* LocalAddress,
-    _In_opt_ const QUIC_ADDR* RemoteAddress,
-    _Out_ QUIC_BINDING** NewBinding
-    )
-{
-    return QuicLibraryGetBindingEx(
- #ifdef QUIC_COMPARTMENT_ID
-        CompartmentId,
- #endif
-        ShareBinding, ServerOwned, FALSE, LocalAddress, RemoteAddress, NewBinding
-    );
-}
-
-_IRQL_requires_max_(PASSIVE_LEVEL)
-QUIC_STATUS
-QuicLibraryGetBindingEx(
-#ifdef QUIC_COMPARTMENT_ID
-    _In_ QUIC_COMPARTMENT_ID CompartmentId,
-#endif
-    _In_ BOOLEAN ShareBinding,
-    _In_ BOOLEAN ServerOwned,
-    _In_ BOOLEAN ExternalSocket,
     _In_opt_ const QUIC_ADDR* LocalAddress,
     _In_opt_ const QUIC_ADDR* RemoteAddress,
     _Out_ QUIC_BINDING** NewBinding
@@ -1473,10 +1402,11 @@ QuicLibraryGetBindingEx(
         goto NewBinding;
     }
 
-    CxPlatDispatchLockAcquire(&MsQuicLib.DatapathLock);
+    CxPlatDispatchLockAcquire(&Library->DatapathLock);
 
     Binding =
         QuicLibraryLookupBinding(
+            Library,
 #ifdef QUIC_COMPARTMENT_ID
             CompartmentId,
 #endif
@@ -1506,7 +1436,7 @@ QuicLibraryGetBindingEx(
         }
     }
 
-    CxPlatDispatchLockRelease(&MsQuicLib.DatapathLock);
+    CxPlatDispatchLockRelease(&Library->DatapathLock);
 
     if (Status != QUIC_STATUS_NOT_FOUND) {
         goto Exit;
@@ -1520,12 +1450,12 @@ NewBinding:
 
     Status =
         QuicBindingInitialize(
+            Library,
 #ifdef QUIC_COMPARTMENT_ID
             CompartmentId,
 #endif
             ShareBinding,
             ServerOwned,
-            ExternalSocket,
             LocalAddress,
             RemoteAddress,
             NewBinding);
@@ -1535,7 +1465,7 @@ NewBinding:
 
     CxPlatSocketGetLocalAddress((*NewBinding)->Socket, &NewLocalAddress);
 
-    CxPlatDispatchLockAcquire(&MsQuicLib.DatapathLock);
+    CxPlatDispatchLockAcquire(&Library->DatapathLock);
 
     //
     // Now that we created the binding, we need to insert it into the list of
@@ -1552,6 +1482,7 @@ NewBinding:
     //
     Binding =
         QuicLibraryLookupBinding(
+            Library,
 #ifdef QUIC_COMPARTMENT_ID
             CompartmentId,
 #endif
@@ -1571,16 +1502,16 @@ NewBinding:
         //
         // No other thread beat us, insert this binding into the list.
         //
-        if (CxPlatListIsEmpty(&MsQuicLib.Bindings)) {
+        if (CxPlatListIsEmpty(&Library->Bindings)) {
             QuicTraceLogInfo(
                 LibraryInUse,
                 "[ lib] Now in use.");
-            MsQuicLib.InUse = TRUE;
+            Library->InUse = TRUE;
         }
-        CxPlatListInsertTail(&MsQuicLib.Bindings, &(*NewBinding)->Link);
+        CxPlatListInsertTail(&Library->Bindings, &(*NewBinding)->Link);
     }
 
-    CxPlatDispatchLockRelease(&MsQuicLib.DatapathLock);
+    CxPlatDispatchLockRelease(&Library->DatapathLock);
 
     if (Binding != NULL) {
         if (PortUnspecified) {
@@ -1625,17 +1556,18 @@ Exit:
 _IRQL_requires_max_(DISPATCH_LEVEL)
 BOOLEAN
 QuicLibraryTryAddRefBinding(
+    _In_ QUIC_LIBRARY *Library,
     _In_ QUIC_BINDING* Binding
     )
 {
     BOOLEAN Success = FALSE;
 
-    CxPlatDispatchLockAcquire(&MsQuicLib.DatapathLock);
+    CxPlatDispatchLockAcquire(&Library->DatapathLock);
     if (Binding->RefCount > 0) {
         Binding->RefCount++;
         Success = TRUE;
     }
-    CxPlatDispatchLockRelease(&MsQuicLib.DatapathLock);
+    CxPlatDispatchLockRelease(&Library->DatapathLock);
 
     return Success;
 }
@@ -1643,6 +1575,7 @@ QuicLibraryTryAddRefBinding(
 _IRQL_requires_max_(PASSIVE_LEVEL)
 void
 QuicLibraryReleaseBinding(
+    _In_ QUIC_LIBRARY *Library,
     _In_ QUIC_BINDING* Binding
     )
 {
@@ -1650,20 +1583,20 @@ QuicLibraryReleaseBinding(
 
     CXPLAT_PASSIVE_CODE();
 
-    CxPlatDispatchLockAcquire(&MsQuicLib.DatapathLock);
+    CxPlatDispatchLockAcquire(&Library->DatapathLock);
     CXPLAT_DBG_ASSERT(Binding->RefCount > 0);
     if (--Binding->RefCount == 0) {
         CxPlatListEntryRemove(&Binding->Link);
         Uninitialize = TRUE;
 
-        if (CxPlatListIsEmpty(&MsQuicLib.Bindings)) {
+        if (CxPlatListIsEmpty(&Library->Bindings)) {
             QuicTraceLogInfo(
                 LibraryNotInUse,
                 "[ lib] No longer in use.");
-            MsQuicLib.InUse = FALSE;
+            Library->InUse = FALSE;
         }
     }
-    CxPlatDispatchLockRelease(&MsQuicLib.DatapathLock);
+    CxPlatDispatchLockRelease(&Library->DatapathLock);
 
     if (Uninitialize) {
         QuicBindingUninitialize(Binding);
@@ -1673,6 +1606,7 @@ QuicLibraryReleaseBinding(
 _IRQL_requires_max_(PASSIVE_LEVEL)
 BOOLEAN
 QuicLibraryOnListenerRegistered(
+    _In_ QUIC_LIBRARY *Library,
     _In_ QUIC_LISTENER* Listener
     )
 {
@@ -1680,9 +1614,9 @@ QuicLibraryOnListenerRegistered(
 
     UNREFERENCED_PARAMETER(Listener);
 
-    CxPlatLockAcquire(&MsQuicLib.Lock);
+    CxPlatLockAcquire(&Library->Lock);
 
-    if (MsQuicLib.StatelessRegistration == NULL) {
+    if (Library->StatelessRegistration == NULL) {
         //
         // Lazily initialize server specific state.
         //
@@ -1696,9 +1630,10 @@ QuicLibraryOnListenerRegistered(
         };
 
         if (QUIC_FAILED(
-            MsQuicRegistrationOpen(
+            MsQuicRegistrationOpenEx(
+                Library,
                 &Config,
-                (HQUIC*)&MsQuicLib.StatelessRegistration))) {
+                (HQUIC*)&Library->StatelessRegistration))) {
             Success = FALSE;
             goto Fail;
         }
@@ -1706,7 +1641,7 @@ QuicLibraryOnListenerRegistered(
 
 Fail:
 
-    CxPlatLockRelease(&MsQuicLib.Lock);
+    CxPlatLockRelease(&Library->Lock);
 
     return Success;
 }
@@ -1715,97 +1650,100 @@ _IRQL_requires_max_(DISPATCH_LEVEL)
 QUIC_WORKER*
 QUIC_NO_SANITIZE("implicit-conversion")
 QuicLibraryGetWorker(
+    _In_ QUIC_LIBRARY *Library,
     _In_ const _In_ CXPLAT_RECV_DATA* Datagram
     )
 {
-    CXPLAT_DBG_ASSERT(MsQuicLib.StatelessRegistration != NULL);
+    CXPLAT_DBG_ASSERT(Library->StatelessRegistration != NULL);
     return
-        &MsQuicLib.StatelessRegistration->WorkerPool->Workers[
-            Datagram->PartitionIndex % MsQuicLib.PartitionCount];
+        &Library->StatelessRegistration->WorkerPool->Workers[
+            Datagram->PartitionIndex % Library->PartitionCount];
 }
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
 _Function_class_(QUIC_TRACE_RUNDOWN_CALLBACK)
 void
 QuicTraceRundown(
-    void
+    void* Context
     )
 {
-    if (!MsQuicLib.Loaded) {
+    QUIC_LIBRARY *Library = (QUIC_LIBRARY *)Context;
+    if (!Library || !Library->Loaded) {
         return;
     }
 
-    CxPlatLockAcquire(&MsQuicLib.Lock);
+    CxPlatLockAcquire(&Library->Lock);
 
-    if (MsQuicLib.RefCount > 0) {
+    if (Library->RefCount > 0) {
         QuicTraceEvent(
             LibraryRundown,
             "[ lib] Rundown, PartitionCount=%u DatapathFeatures=%u",
-            MsQuicLib.PartitionCount,
-            CxPlatDataPathGetSupportedFeatures(MsQuicLib.Datapath));
+            Library->PartitionCount,
+            CxPlatDataPathGetSupportedFeatures(Library->Datapath));
 
         QuicTraceEvent(
             LibrarySendRetryStateUpdated,
             "[ lib] New SendRetryEnabled state, %hhu",
-            MsQuicLib.SendRetryEnabled);
+            Library->SendRetryEnabled);
 
-        if (MsQuicLib.StatelessRegistration) {
-            QuicRegistrationTraceRundown(MsQuicLib.StatelessRegistration);
+        if (Library->StatelessRegistration) {
+            QuicRegistrationTraceRundown(Library->StatelessRegistration);
         }
 
-        for (CXPLAT_LIST_ENTRY* Link = MsQuicLib.Registrations.Flink;
-            Link != &MsQuicLib.Registrations;
+        for (CXPLAT_LIST_ENTRY* Link = Library->Registrations.Flink;
+            Link != &Library->Registrations;
             Link = Link->Flink) {
             QuicRegistrationTraceRundown(
                 CXPLAT_CONTAINING_RECORD(Link, QUIC_REGISTRATION, Link));
         }
 
-        CxPlatDispatchLockAcquire(&MsQuicLib.DatapathLock);
-        for (CXPLAT_LIST_ENTRY* Link = MsQuicLib.Bindings.Flink;
-            Link != &MsQuicLib.Bindings;
+        CxPlatDispatchLockAcquire(&Library->DatapathLock);
+        for (CXPLAT_LIST_ENTRY* Link = Library->Bindings.Flink;
+            Link != &Library->Bindings;
             Link = Link->Flink) {
             QuicBindingTraceRundown(
                 CXPLAT_CONTAINING_RECORD(Link, QUIC_BINDING, Link));
         }
-        CxPlatDispatchLockRelease(&MsQuicLib.DatapathLock);
+        CxPlatDispatchLockRelease(&Library->DatapathLock);
 
         int64_t PerfCounters[QUIC_PERF_COUNTER_MAX];
-        QuicLibrarySumPerfCounters((uint8_t*)PerfCounters, sizeof(PerfCounters));
+        QuicLibrarySumPerfCounters(Library, (uint8_t*)PerfCounters, sizeof(PerfCounters));
         QuicTraceEvent(
             PerfCountersRundown,
             "[ lib] Perf counters Rundown, Counters=%!CID!",
             CASTED_CLOG_BYTEARRAY(sizeof(PerfCounters), PerfCounters));
     }
 
-    CxPlatLockRelease(&MsQuicLib.Lock);
+    CxPlatLockRelease(&Library->Lock);
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 _Ret_maybenull_
 CXPLAT_KEY*
 QuicLibraryGetStatelessRetryKeyForTimestamp(
+    _In_ QUIC_LIBRARY *Library,
     _In_ int64_t Timestamp
     )
 {
-    if (Timestamp < MsQuicLib.StatelessRetryKeysExpiration[!MsQuicLib.CurrentStatelessRetryKey] - QUIC_STATELESS_RETRY_KEY_LIFETIME_MS) {
+    if (Timestamp < Library->StatelessRetryKeysExpiration[!Library->CurrentStatelessRetryKey] - QUIC_STATELESS_RETRY_KEY_LIFETIME_MS) {
         //
         // Timestamp is before the beginning of the previous key's validity window.
         //
         return NULL;
     }
 
-    if (Timestamp < MsQuicLib.StatelessRetryKeysExpiration[!MsQuicLib.CurrentStatelessRetryKey]) {
-        if (MsQuicLib.StatelessRetryKeys[!MsQuicLib.CurrentStatelessRetryKey] == NULL) {
+    if (Timestamp < Library->StatelessRetryKeysExpiration[!Library->CurrentStatelessRetryKey]) {
+        if (Library->StatelessRetryKeys[!Library->CurrentStatelessRetryKey] == NULL) {
             return NULL;
         }
-        return MsQuicLib.StatelessRetryKeys[!MsQuicLib.CurrentStatelessRetryKey];
+        return Library->StatelessRetryKeys[!Library->CurrentStatelessRetryKey];
     }
 
-    if (Timestamp < MsQuicLib.StatelessRetryKeysExpiration[MsQuicLib.CurrentStatelessRetryKey]) {
-        if (MsQuicLib.StatelessRetryKeys[MsQuicLib.CurrentStatelessRetryKey] == NULL) {
+    if (Timestamp < Library->StatelessRetryKeysExpiration[Library->CurrentStatelessRetryKey]) {
+        if (Library->StatelessRetryKeys[Library->CurrentStatelessRetryKey] == NULL) {
             return NULL;
         }
-        return MsQuicLib.StatelessRetryKeys[MsQuicLib.CurrentStatelessRetryKey];
+        return Library->StatelessRetryKeys[Library->CurrentStatelessRetryKey];
     }
 
     //
@@ -1818,14 +1756,14 @@ _IRQL_requires_max_(DISPATCH_LEVEL)
 _Ret_maybenull_
 CXPLAT_KEY*
 QuicLibraryGetCurrentStatelessRetryKey(
-    void
+    QUIC_LIBRARY *Library
     )
 {
     int64_t Now = CxPlatTimeEpochMs64();
     int64_t StartTime = (Now / QUIC_STATELESS_RETRY_KEY_LIFETIME_MS) * QUIC_STATELESS_RETRY_KEY_LIFETIME_MS;
 
-    if (StartTime < MsQuicLib.StatelessRetryKeysExpiration[MsQuicLib.CurrentStatelessRetryKey]) {
-        return MsQuicLib.StatelessRetryKeys[MsQuicLib.CurrentStatelessRetryKey];
+    if (StartTime < Library->StatelessRetryKeysExpiration[Library->CurrentStatelessRetryKey]) {
+        return Library->StatelessRetryKeys[Library->CurrentStatelessRetryKey];
     }
 
     //
@@ -1853,10 +1791,10 @@ QuicLibraryGetCurrentStatelessRetryKey(
         return NULL;
     }
 
-    MsQuicLib.StatelessRetryKeysExpiration[!MsQuicLib.CurrentStatelessRetryKey] = ExpirationTime;
-    CxPlatKeyFree(MsQuicLib.StatelessRetryKeys[!MsQuicLib.CurrentStatelessRetryKey]);
-    MsQuicLib.StatelessRetryKeys[!MsQuicLib.CurrentStatelessRetryKey] = NewKey;
-    MsQuicLib.CurrentStatelessRetryKey = !MsQuicLib.CurrentStatelessRetryKey;
+    Library->StatelessRetryKeysExpiration[!Library->CurrentStatelessRetryKey] = ExpirationTime;
+    CxPlatKeyFree(Library->StatelessRetryKeys[!Library->CurrentStatelessRetryKey]);
+    Library->StatelessRetryKeys[!Library->CurrentStatelessRetryKey] = NewKey;
+    Library->CurrentStatelessRetryKey = !Library->CurrentStatelessRetryKey;
 
     return NewKey;
 }
@@ -1864,41 +1802,184 @@ QuicLibraryGetCurrentStatelessRetryKey(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 void
 QuicLibraryOnHandshakeConnectionAdded(
-    void
+    QUIC_LIBRARY *Library
     )
 {
     InterlockedExchangeAdd64(
-        (int64_t*)&MsQuicLib.CurrentHandshakeMemoryUsage,
+        (int64_t*)&Library->CurrentHandshakeMemoryUsage,
         (int64_t)QUIC_CONN_HANDSHAKE_MEMORY_USAGE);
-    QuicLibraryEvaluateSendRetryState();
+    QuicLibraryEvaluateSendRetryState(Library);
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 void
 QuicLibraryOnHandshakeConnectionRemoved(
-    void
+    QUIC_LIBRARY *Library
     )
 {
     InterlockedExchangeAdd64(
-        (int64_t*)&MsQuicLib.CurrentHandshakeMemoryUsage,
+        (int64_t*)&Library->CurrentHandshakeMemoryUsage,
         -1 * (int64_t)QUIC_CONN_HANDSHAKE_MEMORY_USAGE);
-    QuicLibraryEvaluateSendRetryState();
+    QuicLibraryEvaluateSendRetryState(Library);
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 void
 QuicLibraryEvaluateSendRetryState(
-    void
+    QUIC_LIBRARY *Library
     )
 {
     BOOLEAN NewSendRetryState =
-        MsQuicLib.CurrentHandshakeMemoryUsage >= MsQuicLib.HandshakeMemoryLimit;
+        Library->CurrentHandshakeMemoryUsage >= Library->HandshakeMemoryLimit;
 
-    if (NewSendRetryState != MsQuicLib.SendRetryEnabled) {
-        MsQuicLib.SendRetryEnabled = NewSendRetryState;
+    if (NewSendRetryState != Library->SendRetryEnabled) {
+        Library->SendRetryEnabled = NewSendRetryState;
         QuicTraceEvent(
             LibrarySendRetryStateUpdated,
             "[ lib] New SendRetryEnabled state, %hhu",
             NewSendRetryState);
+    }
+}
+
+
+//
+// My extend interfaces
+//
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+HQUIC_LIBRARY
+QUIC_API
+MsQuicLibraryOpen(
+    _In_ BOOLEAN ExternalSocket
+    )
+{
+    QUIC_LIBRARY *Library = CXPLAT_ALLOC_NONPAGED(sizeof(QUIC_LIBRARY), QUIC_POOL_API);
+    if (Library == NULL) {
+        //Status = QUIC_STATUS_OUT_OF_MEMORY;
+        return NULL;
+    }
+    CxPlatZeroMemory(Library, sizeof(QUIC_LIBRARY));
+    QuicLibraryPrivateInit(Library, ExternalSocket);
+    return Library;
+}
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+void
+QUIC_API
+MsQuicLibraryClose(
+    _In_ HQUIC_LIBRARY Library
+    )
+{
+    if (Library != NULL) {
+        QuicLibraryPrivateUnInit(Library);
+        free(Library);
+    }
+}
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+QUIC_STATUS
+QUIC_API
+MsQuicOpenEx(
+    _In_ QUIC_LIBRARY* Library,
+    _Out_ _Pre_defensive_ const QUIC_API_TABLE** QuicApi
+    )
+{
+    QUIC_STATUS Status;
+
+    if (QuicApi == NULL) {
+        QuicTraceLogVerbose(
+            LibraryMsQuicOpenNull,
+            "[ api] MsQuicOpenEx, NULL");
+        Status = QUIC_STATUS_INVALID_PARAMETER;
+        goto Exit;
+    }
+
+    QuicTraceLogVerbose(
+        LibraryMsQuicOpenEntry,
+        "[ api] MsQuicOpenEx");
+
+    Status = MsQuicAddRef(Library);
+    if (QUIC_FAILED(Status)) {
+        goto Exit;
+    }
+
+    QUIC_API_TABLE* Api = CXPLAT_ALLOC_NONPAGED(sizeof(QUIC_API_TABLE), QUIC_POOL_API);
+    if (Api == NULL) {
+        Status = QUIC_STATUS_OUT_OF_MEMORY;
+        goto Error;
+    }
+
+    Api->SetContext = MsQuicSetContext;
+    Api->GetContext = MsQuicGetContext;
+    Api->SetCallbackHandler = MsQuicSetCallbackHandler;
+
+    Api->SetParam = MsQuicSetParam;
+    Api->GetParam = MsQuicGetParam;
+
+    Api->RegistrationOpen = MsQuicRegistrationOpen;
+    Api->RegistrationOpenEx = MsQuicRegistrationOpenEx;
+    Api->RegistrationClose = MsQuicRegistrationClose;
+    Api->RegistrationShutdown = MsQuicRegistrationShutdown;
+
+    Api->ConfigurationOpen = MsQuicConfigurationOpen;
+    Api->ConfigurationClose = MsQuicConfigurationClose;
+    Api->ConfigurationLoadCredential = MsQuicConfigurationLoadCredential;
+
+    Api->ListenerOpen = MsQuicListenerOpen;
+    Api->ListenerClose = MsQuicListenerClose;
+    Api->ListenerStart = MsQuicListenerStart;
+    Api->ListenerStartEx = MsQuicListenerStartEx;
+    Api->ListenerStop = MsQuicListenerStop;
+    Api->ListenerExternalInput = MsQuicListenerExternalInput;
+
+    Api->ConnectionOpen = MsQuicConnectionOpen;
+    Api->ConnectionClose = MsQuicConnectionClose;
+    Api->ConnectionShutdown = MsQuicConnectionShutdown;
+    Api->ConnectionStart = MsQuicConnectionStart;
+    Api->ConnectionSetConfiguration = MsQuicConnectionSetConfiguration;
+    Api->ConnectionSendResumptionTicket = MsQuicConnectionSendResumptionTicket;
+
+    Api->StreamOpen = MsQuicStreamOpen;
+    Api->StreamClose = MsQuicStreamClose;
+    Api->StreamShutdown = MsQuicStreamShutdown;
+    Api->StreamStart = MsQuicStreamStart;
+    Api->StreamSend = MsQuicStreamSend;
+    Api->StreamReceiveComplete = MsQuicStreamReceiveComplete;
+    Api->StreamReceiveSetEnabled = MsQuicStreamReceiveSetEnabled;
+
+    Api->DatagramSend = MsQuicDatagramSend;
+
+    *QuicApi = Api;
+
+Error:
+
+    if (QUIC_FAILED(Status)) {
+        MsQuicRelease(Library);
+    }
+
+Exit:
+
+    QuicTraceLogVerbose(
+        LibraryMsQuicOpenExit,
+        "[ api] MsQuicOpenEx, status=0x%x",
+        Status);
+
+    return Status;
+}
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+void
+QUIC_API
+MsQuicCloseEx(
+    _In_ QUIC_LIBRARY* Library,
+    _In_ _Pre_defensive_ const QUIC_API_TABLE* QuicApi
+    )
+{
+    if (QuicApi != NULL) {
+        QuicTraceLogVerbose(
+            LibraryMsQuicClose,
+            "[ api] MsQuicCloseEx");
+        CXPLAT_FREE(QuicApi, QUIC_POOL_API);
+        MsQuicRelease(Library);
     }
 }

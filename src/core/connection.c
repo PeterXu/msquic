@@ -65,6 +65,7 @@ QuicConnAlloc(
     _In_opt_ const CXPLAT_RECV_DATA* const Datagram
     )
 {
+    QUIC_LIBRARY* Library = Registration->Library;
     BOOLEAN IsServer = Datagram != NULL;
     uint32_t CurProcIndex = CxPlatProcCurrentNumber();
 
@@ -75,13 +76,13 @@ QuicConnAlloc(
     //
     uint16_t BasePartitionId =
         IsServer ?
-            (Datagram->PartitionIndex % MsQuicLib.PartitionCount) :
-            CurProcIndex % MsQuicLib.PartitionCount;
-    uint16_t PartitionId = QuicPartitionIdCreate(BasePartitionId);
-    CXPLAT_DBG_ASSERT(BasePartitionId == QuicPartitionIdGetIndex(PartitionId));
+            (Datagram->PartitionIndex % Library->PartitionCount) :
+            CurProcIndex % Library->PartitionCount;
+    uint16_t PartitionId = QuicPartitionIdCreate(Library, BasePartitionId);
+    CXPLAT_DBG_ASSERT(BasePartitionId == QuicPartitionIdGetIndex(Library, PartitionId));
 
     QUIC_CONNECTION* Connection =
-        CxPlatPoolAlloc(&MsQuicLib.PerProc[CurProcIndex].ConnectionPool);
+        CxPlatPoolAlloc(&Library->PerProc[CurProcIndex].ConnectionPool);
     if (Connection == NULL) {
         QuicTraceEvent(
             AllocFailure,
@@ -92,15 +93,16 @@ QuicConnAlloc(
     }
 
     CxPlatZeroMemory(Connection, sizeof(QUIC_CONNECTION));
+    Connection->Library = Library;
 
 #if DEBUG
-    InterlockedIncrement(&MsQuicLib.ConnectionCount);
+    InterlockedIncrement(&Library->ConnectionCount);
 #endif
-    QuicPerfCounterIncrement(QUIC_PERF_COUNTER_CONN_CREATED);
-    QuicPerfCounterIncrement(QUIC_PERF_COUNTER_CONN_ACTIVE);
+    QuicPerfCounterIncrement(Library, QUIC_PERF_COUNTER_CONN_CREATED);
+    QuicPerfCounterIncrement(Library, QUIC_PERF_COUNTER_CONN_ACTIVE);
 
     Connection->Stats.CorrelationId =
-        InterlockedIncrement64((int64_t*)&MsQuicLib.ConnectionCorrelationId) - 1;
+        InterlockedIncrement64((int64_t*)&Library->ConnectionCorrelationId) - 1;
     QuicTraceEvent(
         ConnCreated,
         "[conn][%p] Created, IsServer=%hhu, CorrelationId=%llu",
@@ -122,7 +124,7 @@ QuicConnAlloc(
     Connection->PeerPacketTolerance = QUIC_MIN_ACK_SEND_NUMBER;
     Connection->PeerTransportParams.AckDelayExponent = QUIC_TP_ACK_DELAY_EXPONENT_DEFAULT;
     Connection->ReceiveQueueTail = &Connection->ReceiveQueue;
-    Connection->Settings = MsQuicLib.Settings;
+    Connection->Settings = Library->Settings;
     Connection->Settings.IsSetFlags = 0; // Just grab the global values, not IsSet flags.
     CxPlatDispatchLockInitialize(&Connection->ReceiveQueueLock);
     CxPlatListInitializeHead(&Connection->DestCids);
@@ -163,7 +165,7 @@ QuicConnAlloc(
             CxPlatDataPathRecvDataToRecvPacket(Datagram);
 
         Connection->Type = QUIC_HANDLE_TYPE_CONNECTION_SERVER;
-        if (MsQuicLib.Settings.LoadBalancingMode == QUIC_LOAD_BALANCING_SERVER_ID_IP) {
+        if (Library->Settings.LoadBalancingMode == QUIC_LOAD_BALANCING_SERVER_ID_IP) {
             CxPlatRandom(1, Connection->ServerID); // Randomize the first byte.
             if (QuicAddrGetFamily(&Datagram->Tuple->LocalAddress) == QUIC_ADDRESS_FAMILY_INET) {
                 CxPlatCopyMemory(
@@ -270,7 +272,7 @@ Error:
     Connection->State.Uninitialized = TRUE;
     for (uint32_t i = 0; i < ARRAYSIZE(Connection->Packets); i++) {
         if (Connection->Packets[i] != NULL) {
-            QuicPacketSpaceUninitialize(Connection->Packets[i]);
+            QuicPacketSpaceUninitialize(Library, Connection->Packets[i]);
             Connection->Packets[i] = NULL;
         }
     }
@@ -294,6 +296,7 @@ QuicConnFree(
     _In_ __drv_freesMem(Mem) QUIC_CONNECTION* Connection
     )
 {
+    QUIC_LIBRARY* Library = Connection->Library;
     CXPLAT_FRE_ASSERT(!Connection->State.Freed);
     CXPLAT_TEL_ASSERT(Connection->RefCount == 0);
     if (Connection->State.ExternalOwner) {
@@ -310,7 +313,7 @@ QuicConnFree(
     //
     for (uint32_t i = 0; i < ARRAYSIZE(Connection->Packets); i++) {
         if (Connection->Packets[i] != NULL) {
-            QuicPacketSpaceUninitialize(Connection->Packets[i]);
+            QuicPacketSpaceUninitialize(Library, Connection->Packets[i]);
             Connection->Packets[i] = NULL;
         }
     }
@@ -356,7 +359,7 @@ QuicConnFree(
     }
     QUIC_PATH* Path = &Connection->Paths[0];
     if (Path->Binding != NULL) {
-        QuicLibraryReleaseBinding(Path->Binding);
+        QuicLibraryReleaseBinding(Library, Path->Binding);
         Path->Binding = NULL;
     }
     CxPlatDispatchLockUninitialize(&Connection->ReceiveQueueLock);
@@ -377,7 +380,7 @@ QuicConnFree(
     if (Connection->HandshakeTP != NULL) {
         QuicCryptoTlsCleanupTransportParameters(Connection->HandshakeTP);
         CxPlatPoolFree(
-            &MsQuicLib.PerProc[CxPlatProcCurrentNumber()].TransportParamPool,
+            &Library->PerProc[CxPlatProcCurrentNumber()].TransportParamPool,
             Connection->HandshakeTP);
         Connection->HandshakeTP = NULL;
     }
@@ -388,10 +391,10 @@ QuicConnFree(
     }
     QuicSettingsCleanup(&Connection->Settings);
     if (Connection->State.Started && !Connection->State.Connected) {
-        QuicPerfCounterIncrement(QUIC_PERF_COUNTER_CONN_HANDSHAKE_FAIL);
+        QuicPerfCounterIncrement(Library, QUIC_PERF_COUNTER_CONN_HANDSHAKE_FAIL);
     }
     if (Connection->State.Connected) {
-        QuicPerfCounterDecrement(QUIC_PERF_COUNTER_CONN_CONNECTED);
+        QuicPerfCounterDecrement(Library, QUIC_PERF_COUNTER_CONN_CONNECTED);
     }
     if (Connection->Registration != NULL) {
         CxPlatRundownRelease(&Connection->Registration->Rundown);
@@ -402,13 +405,13 @@ QuicConnFree(
         "[conn][%p] Destroyed",
         Connection);
     CxPlatPoolFree(
-        &MsQuicLib.PerProc[CxPlatProcCurrentNumber()].ConnectionPool,
+        &Library->PerProc[CxPlatProcCurrentNumber()].ConnectionPool,
         Connection);
 
 #if DEBUG
-    InterlockedDecrement(&MsQuicLib.ConnectionCount);
+    InterlockedDecrement(&Library->ConnectionCount);
 #endif
-    QuicPerfCounterDecrement(QUIC_PERF_COUNTER_CONN_ACTIVE);
+    QuicPerfCounterDecrement(Library, QUIC_PERF_COUNTER_CONN_ACTIVE);
 }
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
@@ -434,6 +437,7 @@ QuicConnUninitialize(
     _In_ QUIC_CONNECTION* Connection
     )
 {
+    QUIC_LIBRARY* Library = Connection->Library;
     CXPLAT_TEL_ASSERT(Connection->State.HandleClosed);
     CXPLAT_TEL_ASSERT(!Connection->State.Uninitialized);
 
@@ -462,7 +466,7 @@ QuicConnUninitialize(
     //
     for (uint32_t i = 0; i < ARRAYSIZE(Connection->Packets); i++) {
         if (Connection->Packets[i] != NULL) {
-            QuicPacketSpaceUninitialize(Connection->Packets[i]);
+            QuicPacketSpaceUninitialize(Library, Connection->Packets[i]);
             Connection->Packets[i] = NULL;
         }
     }
@@ -715,13 +719,14 @@ QuicConnQueueOper(
     _In_ QUIC_OPERATION* Oper
     )
 {
-    #if DEBUG
+    QUIC_LIBRARY* Library = Connection->Library;
+#if DEBUG
     if (!Connection->State.Initialized) {
         CXPLAT_DBG_ASSERT(QuicConnIsServer(Connection));
         CXPLAT_DBG_ASSERT(Connection->SourceCids.Next != NULL || CxPlatIsRandomMemoryFailureEnabled());
     }
 #endif
-    if (QuicOperationEnqueue(&Connection->OperQ, Oper)) {
+    if (QuicOperationEnqueue(Library, &Connection->OperQ, Oper)) {
         //
         // The connection needs to be queued on the worker because this was the
         // first operation in our OperQ.
@@ -737,7 +742,8 @@ QuicConnQueueHighestPriorityOper(
     _In_ QUIC_OPERATION* Oper
     )
 {
-    if (QuicOperationEnqueueFront(&Connection->OperQ, Oper)) {
+    QUIC_LIBRARY* Library = Connection->Library;
+    if (QuicOperationEnqueueFront(Library, &Connection->OperQ, Oper)) {
         //
         // The connection needs to be queued on the worker because this was the
         // first operation in our OperQ.
@@ -808,6 +814,7 @@ QuicConnGenerateNewSourceCid(
     _In_ BOOLEAN IsInitial
     )
 {
+    QUIC_LIBRARY* Library = Connection->Library;
     uint8_t TryCount = 0;
     QUIC_CID_HASH_ENTRY* SourceCid;
 
@@ -827,6 +834,7 @@ QuicConnGenerateNewSourceCid(
     do {
         SourceCid =
             QuicCidNewRandomSource(
+                Library,
                 Connection,
                 Connection->ServerID,
                 Connection->PartitionID,
@@ -837,7 +845,7 @@ QuicConnGenerateNewSourceCid(
                 AllocFailure,
                 "Allocation of '%s' failed. (%llu bytes)",
                 "new Src CID",
-                sizeof(QUIC_CID_HASH_ENTRY) + MsQuicLib.CidTotalLength);
+                sizeof(QUIC_CID_HASH_ENTRY) + Library->CidTotalLength);
             QuicConnFatalError(Connection, QUIC_STATUS_INTERNAL_ERROR, NULL);
             return NULL;
         }
@@ -1445,6 +1453,7 @@ QuicConnTryClose(
     _In_ uint16_t RemoteReasonPhraseLength
     )
 {
+    QUIC_LIBRARY *Library = Connection->Library;
     BOOLEAN ClosedRemotely = !!(Flags & QUIC_CLOSE_REMOTE);
     BOOLEAN SilentClose = !!(Flags & QUIC_CLOSE_SILENT);
 
@@ -1608,7 +1617,7 @@ QuicConnTryClose(
             Connection->CloseStatus = QuicErrorCodeToStatus(ErrorCode);
             Connection->CloseErrorCode = ErrorCode;
             if (QuicErrorIsProtocolError(ErrorCode)) {
-                QuicPerfCounterIncrement(QUIC_PERF_COUNTER_CONN_PROTOCOL_ERRORS);
+                QuicPerfCounterIncrement(Library, QUIC_PERF_COUNTER_CONN_PROTOCOL_ERRORS);
             }
         }
 
@@ -1750,6 +1759,7 @@ QuicConnStart(
     )
 {
     QUIC_STATUS Status;
+    QUIC_LIBRARY* Library = Connection->Library;
     QUIC_PATH* Path = &Connection->Paths[0];
     CXPLAT_DBG_ASSERT(!QuicConnIsServer(Connection));
 
@@ -1789,7 +1799,7 @@ QuicConnStart(
         //
         Status =
             CxPlatDataPathResolveAddress(
-                MsQuicLib.Datapath,
+                Library->Datapath,
                 ServerName,
                 &Path->RemoteAddress);
 
@@ -1818,6 +1828,7 @@ QuicConnStart(
     //
     Status =
         QuicLibraryGetBinding(
+            Library,
 #ifdef QUIC_COMPARTMENT_ID
             Configuration->CompartmentId,
 #endif
@@ -1838,6 +1849,7 @@ QuicConnStart(
     if (Connection->State.ShareBinding) {
         SourceCid =
             QuicCidNewRandomSource(
+                Library,
                 Connection,
                 NULL,
                 Connection->PartitionID,
@@ -1861,7 +1873,7 @@ QuicConnStart(
     CxPlatListPushEntry(&Connection->SourceCids, &SourceCid->Link);
 
     if (!QuicBindingAddSourceConnectionID(Path->Binding, SourceCid)) {
-        QuicLibraryReleaseBinding(Path->Binding);
+        QuicLibraryReleaseBinding(Library, Path->Binding);
         Path->Binding = NULL;
         Status = QUIC_STATUS_OUT_OF_MEMORY;
         goto Exit;
@@ -2155,12 +2167,13 @@ QuicConnCleanupServerResumptionState(
     _In_ QUIC_CONNECTION* Connection
     )
 {
+    QUIC_LIBRARY* Library = Connection->Library;
     CXPLAT_DBG_ASSERT(QuicConnIsServer(Connection));
     if (!Connection->State.ResumptionEnabled) {
         if (Connection->HandshakeTP != NULL) {
             QuicCryptoTlsCleanupTransportParameters(Connection->HandshakeTP);
             CxPlatPoolFree(
-                &MsQuicLib.PerProc[CxPlatProcCurrentNumber()].TransportParamPool,
+                &Library->PerProc[CxPlatProcCurrentNumber()].TransportParamPool,
                 Connection->HandshakeTP);
             Connection->HandshakeTP = NULL;
         }
@@ -2192,6 +2205,7 @@ QuicConnGenerateLocalTransportParameters(
     _Out_ QUIC_TRANSPORT_PARAMETERS* LocalTP
     )
 {
+    QUIC_LIBRARY* Library = Connection->Library;
     CXPLAT_TEL_ASSERT(Connection->Configuration != NULL);
 
     CXPLAT_DBG_ASSERT(Connection->SourceCids.Next != NULL);
@@ -2210,8 +2224,8 @@ QuicConnGenerateLocalTransportParameters(
             CxPlatSocketGetLocalMtu(
                 Connection->Paths[0].Binding->Socket));
     LocalTP->MaxAckDelay =
-        Connection->Settings.MaxAckDelayMs + MsQuicLib.TimerResolutionMs;
-    LocalTP->MinAckDelay = MS_TO_US(MsQuicLib.TimerResolutionMs);
+        Connection->Settings.MaxAckDelayMs + Library->TimerResolutionMs;
+    LocalTP->MinAckDelay = MS_TO_US(Library->TimerResolutionMs);
     LocalTP->ActiveConnectionIdLimit = QUIC_ACTIVE_CONNECTION_ID_LIMIT;
     LocalTP->Flags =
         QUIC_TP_FLAG_INITIAL_MAX_DATA |
@@ -2530,15 +2544,16 @@ QuicConnProcessPeerVersionNegotiationTP(
     )
 {
     QUIC_STATUS Status;
+    QUIC_LIBRARY* Library = Connection->Library;
     if (QuicConnIsServer(Connection)) {
         //
         // Check whether version is in (App-specified) list of supported versions
         //
         uint32_t SupportedVersionsLength = 0;
         const uint32_t* SupportedVersions = NULL;
-        if (MsQuicLib.Settings.IsSet.DesiredVersionsList) {
-            SupportedVersionsLength = MsQuicLib.Settings.DesiredVersionsListLength;
-            SupportedVersions = MsQuicLib.Settings.DesiredVersionsList;
+        if (Library->Settings.IsSet.DesiredVersionsList) {
+            SupportedVersionsLength = Library->Settings.DesiredVersionsListLength;
+            SupportedVersions = Library->Settings.DesiredVersionsList;
         } else {
             SupportedVersionsLength = ARRAYSIZE(DefaultSupportedVersionsList);
             SupportedVersions = DefaultSupportedVersionsList;
@@ -3035,6 +3050,7 @@ QuicConnRecvVerNeg(
     _In_ const CXPLAT_RECV_PACKET* const Packet
     )
 {
+    QUIC_LIBRARY* Library = Connection->Library;
     uint32_t SupportedVersion = 0;
 
     // TODO - Validate the packet's SourceCid is equal to our DestCid.
@@ -3083,7 +3099,7 @@ QuicConnRecvVerNeg(
         //
         if (SupportedVersion == 0 &&
             ((!QuicConnIsServer(Connection) && QuicVersionNegotiationExtIsVersionClientSupported(Connection, ServerVersion)) ||
-            (QuicConnIsServer(Connection) && QuicVersionNegotiationExtIsVersionServerSupported(ServerVersion)))) {
+            (QuicConnIsServer(Connection) && QuicVersionNegotiationExtIsVersionServerSupported(Library, ServerVersion)))) {
             SupportedVersion = ServerVersion;
         }
     }
@@ -3375,6 +3391,7 @@ QuicConnRecvHeader(
     _Out_writes_all_(16) uint8_t* Cipher
     )
 {
+    QUIC_LIBRARY* Library = Connection->Library;
     //
     // Check invariants and packet version.
     //
@@ -3462,7 +3479,7 @@ QuicConnRecvHeader(
             CXPLAT_DBG_ASSERT(TokenLength == sizeof(QUIC_RETRY_TOKEN_CONTENTS));
 
             QUIC_RETRY_TOKEN_CONTENTS Token;
-            if (!QuicRetryTokenDecrypt(Packet, TokenBuffer, &Token)) {
+            if (!QuicRetryTokenDecrypt(Library, Packet, TokenBuffer, &Token)) {
                 CXPLAT_DBG_ASSERT(FALSE); // Was already decrypted sucessfully once.
                 QuicPacketLogDrop(Connection, Packet, "Retry token decrypt failure");
                 return FALSE;
@@ -3708,6 +3725,7 @@ QuicConnRecvDecryptAndAuthenticate(
     _In_ CXPLAT_RECV_PACKET* Packet
     )
 {
+    QUIC_LIBRARY* Library = Connection->Library;
     CXPLAT_DBG_ASSERT(Packet->BufferLength >= Packet->HeaderLength + Packet->PayloadLength);
 
     const uint8_t* Payload = Packet->Buffer + Packet->HeaderLength;
@@ -3791,7 +3809,7 @@ QuicConnRecvDecryptAndAuthenticate(
             QuicPacketLogHeader(
                 Connection,
                 TRUE,
-                Connection->State.ShareBinding ? MsQuicLib.CidTotalLength : 0,
+                Connection->State.ShareBinding ? Library->CidTotalLength : 0,
                 Packet->PacketNumber,
                 Packet->HeaderLength,
                 Packet->Buffer,
@@ -3799,7 +3817,7 @@ QuicConnRecvDecryptAndAuthenticate(
         }
         Connection->Stats.Recv.DecryptionFailures++;
         QuicPacketLogDrop(Connection, Packet, "Decryption failure");
-        QuicPerfCounterIncrement(QUIC_PERF_COUNTER_PKTS_DECRYPTION_FAIL);
+        QuicPerfCounterIncrement(Library, QUIC_PERF_COUNTER_PKTS_DECRYPTION_FAIL);
         if (Connection->Stats.Recv.DecryptionFailures >= CXPLAT_AEAD_INTEGRITY_LIMIT) {
             QuicConnTransportError(Connection, QUIC_ERROR_AEAD_LIMIT_REACHED);
         }
@@ -3853,7 +3871,7 @@ QuicConnRecvDecryptAndAuthenticate(
             QuicPacketLogHeader(
                 Connection,
                 TRUE,
-                Connection->State.ShareBinding ? MsQuicLib.CidTotalLength : 0,
+                Connection->State.ShareBinding ? Library->CidTotalLength : 0,
                 Packet->PacketNumber,
                 Packet->BufferLength,
                 Packet->Buffer,
@@ -3872,7 +3890,7 @@ QuicConnRecvDecryptAndAuthenticate(
         QuicPacketLogHeader(
             Connection,
             TRUE,
-            Connection->State.ShareBinding ? MsQuicLib.CidTotalLength : 0,
+            Connection->State.ShareBinding ? Library->CidTotalLength : 0,
             Packet->PacketNumber,
             Packet->HeaderLength + Packet->PayloadLength,
             Packet->Buffer,
@@ -3981,6 +3999,7 @@ QuicConnRecvFrames(
     _In_ CXPLAT_ECN_TYPE ECN
     )
 {
+    QUIC_LIBRARY* Library = Connection->Library;
     BOOLEAN AckPacketImmediately = FALSE; // Allows skipping delayed ACK timer.
     BOOLEAN UpdatedFlowControl = FALSE;
     QUIC_ENCRYPT_LEVEL EncryptLevel = QuicKeyTypeToEncryptLevel(Packet->KeyType);
@@ -4759,7 +4778,7 @@ QuicConnRecvFrames(
                 return FALSE;
             }
 
-            if (Frame.UpdateMaxAckDelay < MS_TO_US(MsQuicLib.TimerResolutionMs)) {
+            if (Frame.UpdateMaxAckDelay < MS_TO_US(Library->TimerResolutionMs)) {
                 QuicTraceEvent(
                     ConnError,
                     "[conn][%p] ERROR, %s.",
@@ -5007,6 +5026,7 @@ QuicConnRecvDatagramBatch(
     _Inout_ QUIC_RECEIVE_PROCESSING_STATE* RecvState
     )
 {
+    QUIC_LIBRARY* Library = Connection->Library;
     uint8_t HpMask[CXPLAT_HP_SAMPLE_LENGTH * QUIC_MAX_CRYPTO_BATCH_COUNT];
 
     CXPLAT_DBG_ASSERT(BatchCount > 0 && BatchCount <= QUIC_MAX_CRYPTO_BATCH_COUNT);
@@ -5052,8 +5072,8 @@ QuicConnRecvDatagramBatch(
 
             if (Connection->Registration != NULL && !Connection->Registration->NoPartitioning &&
                 Path->IsActive && !Path->PartitionUpdated && Packet->CompletelyValid &&
-                (Datagrams[i]->PartitionIndex % MsQuicLib.PartitionCount) != RecvState->PartitionIndex) {
-                RecvState->PartitionIndex = Datagrams[i]->PartitionIndex % MsQuicLib.PartitionCount;
+                (Datagrams[i]->PartitionIndex % Library->PartitionCount) != RecvState->PartitionIndex) {
+                RecvState->PartitionIndex = Datagrams[i]->PartitionIndex % Library->PartitionCount;
                 RecvState->UpdatePartitionId = TRUE;
                 Path->PartitionUpdated = TRUE;
             }
@@ -5082,14 +5102,16 @@ QuicConnRecvDatagrams(
     _In_ BOOLEAN IsDeferred
     )
 {
+    QUIC_LIBRARY* Library = Connection->Library;
     CXPLAT_RECV_DATA* ReleaseChain = NULL;
     CXPLAT_RECV_DATA** ReleaseChainTail = &ReleaseChain;
     uint32_t ReleaseChainCount = 0;
     QUIC_RECEIVE_PROCESSING_STATE RecvState = { FALSE, FALSE, 0 };
-    RecvState.PartitionIndex = QuicPartitionIdGetIndex(Connection->PartitionID);
+    RecvState.PartitionIndex = QuicPartitionIdGetIndex(Library, Connection->PartitionID);
     if (Connection->Registration && Connection->Registration->SplitPartitioning) {
         RecvState.PartitionIndex =
             QuicPartitionIndexDecrement(
+                Library,
                 RecvState.PartitionIndex,
                 QUIC_MAX_THROUGHPUT_PARTITION_OFFSET);
     }
@@ -5345,11 +5367,12 @@ QuicConnRecvDatagrams(
             // TODO - Constrain PartitionID to the same NUMA node?
             RecvState.PartitionIndex =
                 QuicPartitionIndexIncrement(
+                    Library,
                     RecvState.PartitionIndex,
                     QUIC_MAX_THROUGHPUT_PARTITION_OFFSET);
         }
-        CXPLAT_DBG_ASSERT(RecvState.PartitionIndex != QuicPartitionIdGetIndex(Connection->PartitionID));
-        Connection->PartitionID = QuicPartitionIdCreate(RecvState.PartitionIndex);
+        CXPLAT_DBG_ASSERT(RecvState.PartitionIndex != QuicPartitionIdGetIndex(Library, Connection->PartitionID));
+        Connection->PartitionID = QuicPartitionIdCreate(Library, RecvState.PartitionIndex);
         QuicConnGenerateNewSourceCids(Connection, TRUE);
         Connection->State.UpdateWorker = TRUE;
     }
@@ -5602,6 +5625,7 @@ QuicConnParamSet(
     )
 {
     QUIC_STATUS Status;
+    QUIC_LIBRARY* Library = Connection->Library;
 
     switch (Param) {
 
@@ -5648,6 +5672,7 @@ QuicConnParamSet(
 
             Status =
                 QuicLibraryGetBinding(
+                    Library,
 #ifdef QUIC_COMPARTMENT_ID
                     Connection->Configuration->CompartmentId,
 #endif
@@ -5667,7 +5692,7 @@ QuicConnParamSet(
 
             QuicBindingMoveSourceConnectionIDs(
                 OldBinding, Connection->Paths[0].Binding, Connection);
-            QuicLibraryReleaseBinding(OldBinding);
+            QuicLibraryReleaseBinding(Library, OldBinding);
 
             QuicTraceEvent(
                 ConnLocalAddrRemoved,
@@ -6436,6 +6461,7 @@ QuicConnApplyNewSettings(
         const QUIC_SETTINGS* NewSettings
     )
 {
+    QUIC_LIBRARY* Library = Connection->Library;
     QuicTraceLogConnInfo(
         ApplySettings,
         Connection,
@@ -6461,7 +6487,7 @@ QuicConnApplyNewSettings(
             Connection->HandshakeTP == NULL) {
             CXPLAT_DBG_ASSERT(!Connection->State.Started);
             Connection->HandshakeTP =
-                CxPlatPoolAlloc(&MsQuicLib.PerProc[CxPlatProcCurrentNumber()].TransportParamPool);
+                CxPlatPoolAlloc(&Library->PerProc[CxPlatProcCurrentNumber()].TransportParamPool);
             if (Connection->HandshakeTP == NULL) {
                 QuicTraceEvent(
                     AllocFailure,
@@ -6685,6 +6711,7 @@ QuicConnDrainOperations(
     _In_ QUIC_CONNECTION* Connection
     )
 {
+    QUIC_LIBRARY* Library = Connection->Library;
     QUIC_OPERATION* Oper;
     const uint32_t MaxOperationCount =
         Connection->Settings.MaxOperationsPerDrain;
@@ -6721,7 +6748,7 @@ QuicConnDrainOperations(
            !Connection->State.UpdateWorker &&
            OperationCount++ < MaxOperationCount) {
 
-        Oper = QuicOperationDequeue(&Connection->OperQ);
+        Oper = QuicOperationDequeue(Library, &Connection->OperQ);
         if (Oper == NULL) {
             HasMoreWorkToDo = FALSE;
             break;
@@ -6766,7 +6793,7 @@ QuicConnDrainOperations(
                 // queue.
                 //
                 FreeOper = FALSE;
-                (void)QuicOperationEnqueue(&Connection->OperQ, Oper);
+                (void)QuicOperationEnqueue(Library, &Connection->OperQ, Oper);
             }
             break;
 
@@ -6790,7 +6817,7 @@ QuicConnDrainOperations(
         }
 
         Connection->Stats.Schedule.OperationCount++;
-        QuicPerfCounterIncrement(QUIC_PERF_COUNTER_CONN_OPER_COMPLETED);
+        QuicPerfCounterIncrement(Library, QUIC_PERF_COUNTER_CONN_OPER_COMPLETED);
     }
 
     if (!Connection->State.ExternalOwner && Connection->State.ClosedLocally) {
