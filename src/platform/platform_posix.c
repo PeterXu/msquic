@@ -27,6 +27,9 @@ Environment:
 
 #define CXPLAT_MAX_LOG_MSG_LEN        1024 // Bytes
 
+volatile short PosixSysRefCount = 0;
+volatile short PosixPlatRefCount = 0;
+
 CX_PLATFORM CxPlatform = { NULL };
 int RandomFd; // Used for reading random numbers.
 QUIC_TRACE_RUNDOWN_CALLBACK* QuicTraceRundownCallback;
@@ -76,6 +79,10 @@ CxPlatSystemLoad(
     void
     )
 {
+    if (InterlockedIncrement16(&PosixSysRefCount) != 1) {
+        return;
+    }
+
     #if defined(CX_PLATFORM_DARWIN)
     //
     // arm64 macOS has no way to get the current proc, so treat as single core.
@@ -171,6 +178,9 @@ CxPlatSystemUnload(
     void
     )
 {
+    if (InterlockedDecrement16(&PosixSysRefCount) != 0) {
+        return;
+    }
     QuicTraceLogInfo(
         PosixUnloaded,
         "[ dso] Unloaded");
@@ -184,6 +194,11 @@ CxPlatInitialize(
     )
 {
     QUIC_STATUS Status;
+
+    if (InterlockedIncrement16(&PosixPlatRefCount) != 1) {
+        Status = (RandomFd == -1) ? QUIC_STATUS_NOT_FOUND : QUIC_STATUS_SUCCESS;
+        goto Exit;
+    }
 
     RandomFd = open("/dev/urandom", O_RDONLY|O_CLOEXEC);
     if (RandomFd == -1) {
@@ -215,7 +230,13 @@ CxPlatUninitialize(
     void
     )
 {
+    if (InterlockedDecrement16(&PosixPlatRefCount) != 0) {
+        return;
+    }
+    if (RandomFd != -1) {
     close(RandomFd);
+    RandomFd = -1;
+    }
     QuicTraceLogInfo(
         PosixUninitialized,
         "[ dso] Uninitialized");
