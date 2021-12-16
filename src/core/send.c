@@ -665,7 +665,6 @@ QuicSendWriteFrames(
             BOOLEAN HasMoreCidsToSend = FALSE;
             BOOLEAN MaxFrameLimitHit = FALSE;
             QUIC_LIBRARY* Library = Connection->Library;
-            (void)Library;
             for (CXPLAT_SLIST_ENTRY* Entry = Connection->SourceCids.Next;
                     Entry != NULL;
                     Entry = Entry->Next) {
@@ -780,14 +779,14 @@ QuicSendWriteFrames(
         }
 
         if (Send->SendFlags & QUIC_CONN_SEND_FLAG_ACK_FREQUENCY) {
-
+            QUIC_LIBRARY* Library = Connection->Library;
             QUIC_ACK_FREQUENCY_EX Frame;
             Frame.SequenceNumber = Connection->SendAckFreqSeqNum;
             Frame.PacketTolerance = Connection->PeerPacketTolerance;
             Frame.UpdateMaxAckDelay =
                 MS_TO_US(
                     (uint64_t)Connection->Settings.MaxAckDelayMs +
-                    (uint64_t)MsQuicLib.TimerResolutionMs);
+                    (uint64_t)Library->TimerResolutionMs);
             Frame.IgnoreOrder = FALSE;
 
             if (QuicAckFrequencyFrameEncode(

@@ -39,7 +39,7 @@ QuicLibraryPrivateInit(
     if (Library != NULL) {
         CxPlatLockInitialize(&Library->Lock);
         CxPlatDispatchLockInitialize(&Library->DatapathLock);
-        CxPlatDispatchLockInitialize(&MsQuicLib.StatelessRetryKeysLock);
+        CxPlatDispatchLockInitialize(&Library->StatelessRetryKeysLock);
         CxPlatListInitializeHead(&Library->Registrations);
         CxPlatListInitializeHead(&Library->Bindings);
         QuicTraceRundownCallback = QuicTraceRundown;
@@ -58,7 +58,7 @@ QuicLibraryPrivateUnInit(
         QUIC_LIB_VERIFY(Library, Library->RefCount == 0);
         QUIC_LIB_VERIFY(Library, !Library->InUse);
         Library->Loaded = FALSE;
-        CxPlatDispatchLockUninitialize(&MsQuicLib.StatelessRetryKeysLock);
+        CxPlatDispatchLockUninitialize(&Library->StatelessRetryKeysLock);
         CxPlatDispatchLockUninitialize(&Library->DatapathLock);
         CxPlatLockUninitialize(&Library->Lock);
     }
@@ -303,8 +303,8 @@ MsQuicLibraryInitialize(
 
     MsQuicLibraryReadSettings((void*)Library, NULL); // NULL means don't update registrations.
 
-    CxPlatZeroMemory(&MsQuicLib.StatelessRetryKeys, sizeof(MsQuicLib.StatelessRetryKeys));
-    CxPlatZeroMemory(&MsQuicLib.StatelessRetryKeysExpiration, sizeof(MsQuicLib.StatelessRetryKeysExpiration));
+    CxPlatZeroMemory(&Library->StatelessRetryKeys, sizeof(Library->StatelessRetryKeys));
+    CxPlatZeroMemory(&Library->StatelessRetryKeysExpiration, sizeof(Library->StatelessRetryKeysExpiration));
 
     uint32_t CompatibilityListByteLength = 0;
     QuicVersionNegotiationExtGenerateCompatibleVersionsList(
@@ -461,12 +461,12 @@ MsQuicLibraryUninitialize(
     // connections that need to be cleaned up before all the bindings and
     // sockets can be cleaned up. Kick off a clean up of those connections.
     //
-    if (MsQuicLib.StatelessRegistration != NULL) {
+    if (Library->StatelessRegistration != NULL) {
         //
         // Best effort to clean up existing connections.
         //
         MsQuicRegistrationShutdown(
-            (HQUIC)MsQuicLib.StatelessRegistration,
+            (HQUIC)Library->StatelessRegistration,
             QUIC_CONNECTION_SHUTDOWN_FLAG_SILENT,
             0);
     }

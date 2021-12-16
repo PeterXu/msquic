@@ -30,6 +30,8 @@ Environment:
 
 #define CXPLAT_MAX_LOG_MSG_LEN        1024 // Bytes
 
+volatile short PosixPlatRefCount = 0;
+
 CX_PLATFORM CxPlatform = { NULL };
 int RandomFd; // Used for reading random numbers.
 QUIC_TRACE_RUNDOWN_CALLBACK* QuicTraceRundownCallback;
@@ -147,6 +149,10 @@ CxPlatInitialize(
     void
     )
 {
+    if (InterlockedIncrement16(&PosixPlatRefCount) != 1) {
+        return (RandomFd == -1) ? QUIC_STATUS_NOT_FOUND : QUIC_STATUS_SUCCESS;
+    }
+
     RandomFd = open("/dev/urandom", O_RDONLY|O_CLOEXEC);
     if (RandomFd == -1) {
         return (QUIC_STATUS)errno;
@@ -162,7 +168,13 @@ CxPlatUninitialize(
     void
     )
 {
+    if (InterlockedDecrement16(&PosixPlatRefCount) != 0) {
+        return;
+    }
+    if (RandomFd != -1) {
     close(RandomFd);
+    RandomFd = -1;
+    }
 }
 
 void*
