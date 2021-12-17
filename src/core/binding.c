@@ -13,6 +13,7 @@ Abstract:
 
 #include "precomp.h"
 #ifdef QUIC_CLOG
+#include "api.c.clog.h"
 #include "binding.c.clog.h"
 #endif
 
