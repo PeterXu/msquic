@@ -4,6 +4,8 @@
 add_library(logging_inc INTERFACE)
 target_link_libraries(inc INTERFACE logging_inc)
 
+include(${PROJECT_SOURCE_DIR}/cmake/ParseLibrary.cmake)
+
 if(QUIC_ENABLE_LOGGING)
     if(WIN32)
         target_link_libraries(inc INTERFACE MsQuicEtw_Header)
@@ -20,7 +22,11 @@ if(QUIC_ENABLE_LOGGING)
         add_library(msquic.lttng SHARED ${LOGGING_FILES})
         target_compile_definitions(msquic.lttng PRIVATE BUILDING_TRACEPOINT_PROVIDER)
         target_link_libraries(msquic.lttng PRIVATE logging_inc inc)
-        target_link_libraries(msquic.lttng PRIVATE ${LTTNGUST_LIBRARIES})
+        #target_link_libraries(msquic.lttng PRIVATE ${LTTNGUST_LIBRARIES})
+
+        list(APPEND LA_LIB_PATHS /usr/lib /usr/local/lib $ENV{LTTNG_LIB_PATH} ${LTTNG_LIB_PATH})
+        ParseStaticLibrary(LTTNGUST_DEPS liblttng-ust.la "${LA_LIB_PATHS}")
+        target_link_libraries(msquic.lttng PRIVATE ${LTTNGUST_DEPS})
 
         install(TARGETS msquic.lttng DESTINATION "${main_lib_dest}")
     endif()
