@@ -268,7 +268,7 @@ typedef struct QUIC_LIBRARY {
 
 } QUIC_LIBRARY;
 
-extern QUIC_LIBRARY MsQuicLib;
+//extern QUIC_LIBRARY MsQuicLib;
 
 #ifdef CxPlatVerifierEnabled
 #define QUIC_LIB_VERIFY(Library, Expr) \

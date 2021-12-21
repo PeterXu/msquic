@@ -1655,7 +1655,7 @@ NewBinding:
     // one and already create the binding.
     //
 
-    if (CxPlatDataPathGetSupportedFeatures(MsQuicLib.Datapath) & CXPLAT_DATAPATH_FEATURE_LOCAL_PORT_SHARING) {
+    if (CxPlatDataPathGetSupportedFeatures(Library->Datapath) & CXPLAT_DATAPATH_FEATURE_LOCAL_PORT_SHARING) {
         //
         // The datapath supports multiple connected sockets on the same local
         // tuple, so we need to do collision detection based on the whole

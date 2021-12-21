@@ -91,6 +91,9 @@ CxPlatSystemLoad(
     CxPlatProcessorCount = 1;
 #else
     CxPlatProcessorCount = (uint32_t)sysconf(_SC_NPROCESSORS_ONLN);
+#if defined(CX_PLATFORM_LINUX)
+    CxPlatProcessorCount = 1;
+#endif
 #endif
 
 #ifdef DEBUG

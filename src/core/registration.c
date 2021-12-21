@@ -33,6 +33,7 @@ MsQuicRegistrationOpen(
         HQUIC* NewRegistration
     )
 {
+    extern QUIC_LIBRARY MsQuicLib;
     return MsQuicRegistrationOpenEx(&MsQuicLib, Config, NewRegistration);
 }
 
