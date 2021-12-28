@@ -14,6 +14,8 @@ Abstract:
 #include "PartitionTest.cpp.clog.h"
 #endif
 
+extern QUIC_LIBRARY MsQuicLib;
+
 extern "C"
 void
 MsQuicCalculatePartitionMask(
