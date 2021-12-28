@@ -313,6 +313,7 @@ typedef struct CXPLAT_DATAPATH_PROC_CONTEXT {
 //
 
 typedef struct CXPLAT_DATAPATH {
+    BOOLEAN ExternalSocket;
 
     //
     // A reference rundown on the datapath binding.
@@ -377,6 +378,7 @@ CxPlatProcessorContextUninitialize(
     _In_ CXPLAT_DATAPATH_PROC_CONTEXT* ProcContext
     )
 {
+    if (ProcContext->KqueueFd != INVALID_SOCKET) {
     struct kevent Event = {0};
     EV_SET(&Event, ProcContext->KqueueFd, EVFILT_USER, EV_ADD | EV_CLEAR, NOTE_TRIGGER, 0, NULL);
     kevent(ProcContext->KqueueFd, &Event, 1, NULL, 0, NULL);
@@ -384,6 +386,7 @@ CxPlatProcessorContextUninitialize(
     CxPlatThreadDelete(&ProcContext->KqueueWaitThread);
 
     close(ProcContext->KqueueFd);
+    }
 
     CxPlatPoolUninitialize(&ProcContext->RecvBlockPool);
     CxPlatPoolUninitialize(&ProcContext->LargeSendBufferPool);
@@ -488,7 +491,8 @@ Exit:
 }
 
 QUIC_STATUS
-CxPlatDataPathInitialize(
+CxPlatDataPathInitializeEx(
+    _In_ BOOLEAN ExternalSocket,
     _In_ uint32_t ClientRecvContextLength,
     _In_opt_ const CXPLAT_UDP_DATAPATH_CALLBACKS* UdpCallbacks,
     _In_opt_ const CXPLAT_TCP_DATAPATH_CALLBACKS* TcpCallbacks,
@@ -767,6 +771,7 @@ Exit:
 QUIC_STATUS
 CxPlatSocketContextInitialize(
     _Inout_ CXPLAT_SOCKET_CONTEXT* SocketContext,
+    _In_ BOOLEAN ExternalSocket,
     _In_ const QUIC_ADDR* LocalAddress,
     _In_ const QUIC_ADDR* RemoteAddress
     )
@@ -780,6 +785,11 @@ CxPlatSocketContextInitialize(
     socklen_t AssignedLocalAddressLength = 0;
 
     CXPLAT_SOCKET* Binding = SocketContext->Binding;
+
+    if (ExternalSocket) {
+        SocketContext->SocketFd = INVALID_SOCKET;
+        goto Exit;
+    }
 
     //
     // Create datagram socket. We will use dual-mode sockets everywhere when we can.
@@ -1061,6 +1071,8 @@ CxPlatSocketContextUninitialize(
     _In_ CXPLAT_SOCKET_CONTEXT* SocketContext
     )
 {
+    if (SocketContext->ProcContext->KqueueFd != INVALID_SOCKET &&
+        SocketContext->SocketFd != INVALID_SOCKET) {
     struct kevent DeleteEvent = {0};
     EV_SET(&DeleteEvent, SocketContext->SocketFd, EVFILT_READ, EV_DELETE, 0, 0, (void*)SocketContext);
     kevent(SocketContext->ProcContext->KqueueFd, &DeleteEvent, 1, NULL, 0, NULL);
@@ -1068,6 +1080,7 @@ CxPlatSocketContextUninitialize(
     struct kevent Event = {0};
     EV_SET(&Event, SocketContext->SocketFd, EVFILT_USER, EV_ADD | EV_CLEAR, NOTE_TRIGGER, 0, (void*)SocketContext);
     kevent(SocketContext->ProcContext->KqueueFd, &Event, 1, NULL, 0, NULL);
+    }
 }
 
 void
@@ -1087,7 +1100,9 @@ CxPlatSocketContextUninitializeComplete(
                 PendingSendLinkage));
     }
 
+    if (SocketContext->SocketFd != INVALID_SOCKET) {
     close(SocketContext->SocketFd);
+    }
 
     CxPlatRundownRelease(&SocketContext->Binding->Rundown);
 }
@@ -1488,13 +1503,13 @@ CxPlatSocketContextProcessEvents(
 //
 
 QUIC_STATUS
-CxPlatSocketCreateUdp(
+CxPlatSocketCreateUdpEx(
+    _In_ BOOLEAN ExternalSocket,
     _In_ CXPLAT_DATAPATH* Datapath,
     _In_ const CXPLAT_UDP_CONFIG* Config,
     _Out_ CXPLAT_SOCKET** NewBinding
     )
 {
-    BOOLEAN External = Config->Flags & CXPLAT_SOCKET_FLAG_EXTERNAL;
     QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
     BOOLEAN IsServerSocket = Config->RemoteAddress == NULL;
     int32_t SuccessfulStartReceives = -1;
@@ -1519,6 +1534,9 @@ CxPlatSocketCreateUdp(
             BindingLength);
         goto Exit;
     }
+
+    //Update
+    Datapath->ExternalSocket = ExternalSocket;
 
     QuicTraceEvent(
         DatapathCreated,
@@ -1554,11 +1572,12 @@ CxPlatSocketCreateUdp(
         Binding->PcpBinding = TRUE;
     }
 
-    if (!External) {
+    if (!ExternalSocket) {
     for (uint32_t i = 0; i < SocketCount; i++) {
         Status =
             CxPlatSocketContextInitialize(
                 &Binding->SocketContexts[i],
+                ExternalSocket,
                 Config->LocalAddress,
                 Config->RemoteAddress);
         if (QUIC_FAILED(Status)) {
@@ -1583,7 +1602,7 @@ CxPlatSocketCreateUdp(
     *NewBinding = Binding;
 
     SuccessfulStartReceives = 0;
-    if (!External) {
+    if (!ExternalSocket) {
     for (uint32_t i = 0; i < SocketCount; i++) {
         Status =
             CxPlatSocketContextStartReceive(

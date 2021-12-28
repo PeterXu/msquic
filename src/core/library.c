@@ -280,7 +280,6 @@ MsQuicLibraryInitialize(
     BOOLEAN PlatformInitialized = FALSE;
     uint32_t DefaultMaxPartitionCount = QUIC_MAX_PARTITION_COUNT;
     const CXPLAT_UDP_DATAPATH_CALLBACKS DatapathCallbacks = {
-        Library->ExternalSocket,
         QuicBindingReceive,
         QuicBindingExternalOutput,
         QuicBindingUnreachable
@@ -428,7 +427,8 @@ MsQuicLibraryInitialize(
     }
 
     Status =
-        CxPlatDataPathInitialize(
+        CxPlatDataPathInitializeEx(
+            Library->ExternalSocket,
             sizeof(CXPLAT_RECV_PACKET),
             &DatapathCallbacks,
             NULL,                   // TcpCallbacks

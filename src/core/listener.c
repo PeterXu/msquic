@@ -285,7 +285,6 @@ MsQuicListenerStartEx(
     UdpConfig.LocalAddress = &BindingLocalAddress;
     UdpConfig.RemoteAddress = NULL;
     UdpConfig.Flags = CXPLAT_SOCKET_FLAG_SHARE | CXPLAT_SOCKET_SERVER_OWNED; // Listeners always share the binding.
-    if (Library->ExternalSocket) UdpConfig.Flags |= CXPLAT_SOCKET_FLAG_EXTERNAL;
     UdpConfig.InterfaceIndex = 0;
 #ifdef QUIC_COMPARTMENT_ID
     UdpConfig.CompartmentId = QuicCompartmentIdGetCurrent();

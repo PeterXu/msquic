@@ -124,7 +124,8 @@ QuicBindingInitialize(
         HookUdpConfig.CallbackContext = Binding;
 
         Status =
-            CxPlatSocketCreateUdp(
+            CxPlatSocketCreateUdpEx(
+                Library->ExternalSocket,
                 Library->Datapath,
                 &HookUdpConfig,
                 &Binding->Socket);
@@ -133,7 +134,8 @@ QuicBindingInitialize(
         ((CXPLAT_UDP_CONFIG*)UdpConfig)->CallbackContext = Binding;
 
         Status =
-            CxPlatSocketCreateUdp(
+            CxPlatSocketCreateUdpEx(
+                Library->ExternalSocket,
                 Library->Datapath,
                 UdpConfig,
                 &Binding->Socket);

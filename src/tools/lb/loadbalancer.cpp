@@ -209,7 +209,7 @@ main(int argc, char **argv)
     CxPlatSystemLoad();
     CxPlatInitialize();
 
-    CXPLAT_UDP_DATAPATH_CALLBACKS LbUdpCallbacks { FALSE, LbReceive, nullptr, NoOpUnreachable };
+    CXPLAT_UDP_DATAPATH_CALLBACKS LbUdpCallbacks { LbReceive, nullptr, NoOpUnreachable };
     CxPlatDataPathInitialize(0, &LbUdpCallbacks, nullptr, &Datapath);
     PublicInterface = new LbPublicInterface(&PublicAddr);
 

@@ -646,7 +646,8 @@ Exit:
 }
 
 QUIC_STATUS
-CxPlatDataPathInitialize(
+CxPlatDataPathInitializeEx(
+    _In_ BOOLEAN ExternalSocket,
     _In_ uint32_t ClientRecvContextLength,
     _In_opt_ const CXPLAT_UDP_DATAPATH_CALLBACKS* UdpCallbacks,
     _In_opt_ const CXPLAT_TCP_DATAPATH_CALLBACKS* TcpCallbacks,
@@ -657,12 +658,10 @@ CxPlatDataPathInitialize(
     if (NewDataPath == NULL) {
         return QUIC_STATUS_INVALID_PARAMETER;
     }
-    BOOLEAN ExternalSocket = FALSE;
     if (UdpCallbacks != NULL) {
         if (UdpCallbacks->Receive == NULL || UdpCallbacks->Unreachable == NULL) {
             return QUIC_STATUS_INVALID_PARAMETER;
         }
-        ExternalSocket = UdpCallbacks->ExternalSocket;
     }
 
     QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
@@ -1905,13 +1904,13 @@ CxPlatSocketContextProcessEvents(
 //
 
 QUIC_STATUS
-CxPlatSocketCreateUdp(
+CxPlatSocketCreateUdpEx(
+    _In_ BOOLEAN ExternalSocket,
     _In_ CXPLAT_DATAPATH* Datapath,
     _In_ const CXPLAT_UDP_CONFIG* Config,
     _Out_ CXPLAT_SOCKET** NewBinding
     )
 {
-    BOOLEAN ExternalSocket = Datapath->ExternalSocket || (Config->Flags & CXPLAT_SOCKET_FLAG_EXTERNAL);
     QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
     BOOLEAN IsServerSocket = Config->RemoteAddress == NULL;
     int32_t SuccessfulStartReceives = -1;

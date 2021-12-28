@@ -1836,7 +1836,6 @@ QuicConnStart(
     UdpConfig.LocalAddress = Connection->State.LocalAddressSet ? &Path->LocalAddress : NULL;
     UdpConfig.RemoteAddress = &Path->RemoteAddress;
     UdpConfig.Flags = Connection->State.ShareBinding ? CXPLAT_SOCKET_FLAG_SHARE : 0;
-    if (Library->ExternalSocket) UdpConfig.Flags |= CXPLAT_SOCKET_FLAG_EXTERNAL;
     UdpConfig.InterfaceIndex = Connection->State.LocalInterfaceSet ? (uint32_t)Path->LocalAddress.Ipv6.sin6_scope_id : 0, // NOLINT(google-readability-casting)
 #ifdef QUIC_COMPARTMENT_ID
     UdpConfig.CompartmentId = Configuration->CompartmentId;
@@ -5733,7 +5732,6 @@ QuicConnParamSet(
             UdpConfig.LocalAddress = LocalAddress;
             UdpConfig.RemoteAddress = &Connection->Paths[0].RemoteAddress;
             UdpConfig.Flags = Connection->State.ShareBinding ? CXPLAT_SOCKET_FLAG_SHARE : 0;
-            if (Library->ExternalSocket) UdpConfig.Flags |= CXPLAT_SOCKET_FLAG_EXTERNAL;
             UdpConfig.InterfaceIndex = 0;
 #ifdef QUIC_COMPARTMENT_ID
             UdpConfig.CompartmentId = Connection->Configuration->CompartmentId;

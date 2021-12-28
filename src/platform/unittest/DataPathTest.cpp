@@ -340,14 +340,12 @@ protected:
     }
 
     const CXPLAT_UDP_DATAPATH_CALLBACKS EmptyUdpCallbacks = {
-        FALSE,
         EmptyReceiveCallback,
         nullptr,
         EmptyUnreachableCallback,
     };
 
     const CXPLAT_UDP_DATAPATH_CALLBACKS UdpRecvCallbacks = {
-        FALSE,
         UdpDataRecvCallback,
         nullptr,
         EmptyUnreachableCallback,
@@ -560,13 +558,13 @@ TEST_F(DataPathTest, InitializeInvalid)
 {
     ASSERT_EQ(QUIC_STATUS_INVALID_PARAMETER, CxPlatDataPathInitialize(0, nullptr, nullptr, nullptr));
     {
-        const CXPLAT_UDP_DATAPATH_CALLBACKS InvalidUdpCallbacks = { FALSE, nullptr, nullptr, EmptyUnreachableCallback };
+        const CXPLAT_UDP_DATAPATH_CALLBACKS InvalidUdpCallbacks = { nullptr, nullptr, EmptyUnreachableCallback };
         CxPlatDataPath Datapath(&InvalidUdpCallbacks);
         ASSERT_EQ(QUIC_STATUS_INVALID_PARAMETER, Datapath.GetInitStatus());
         ASSERT_EQ(nullptr, Datapath.Datapath);
     }
     {
-        const CXPLAT_UDP_DATAPATH_CALLBACKS InvalidUdpCallbacks = { FALSE, EmptyReceiveCallback, nullptr, nullptr };
+        const CXPLAT_UDP_DATAPATH_CALLBACKS InvalidUdpCallbacks = { EmptyReceiveCallback, nullptr, nullptr };
         CxPlatDataPath Datapath(&InvalidUdpCallbacks);
         ASSERT_EQ(QUIC_STATUS_INVALID_PARAMETER, Datapath.GetInitStatus());
         ASSERT_EQ(nullptr, Datapath.Datapath);
